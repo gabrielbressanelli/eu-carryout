@@ -16,7 +16,7 @@ import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+environ.Env.read_env(BASE_DIR/ ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -41,6 +41,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://carryout-production.up.railway.app",
     "https://carryout.online",
     "https://www.carryout.online",
+    "https://127.0.0.1", 
+    "https://localhost", 
 ]
 
 # Application definition

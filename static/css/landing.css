@@ -24,10 +24,10 @@ body.landing-body { margin: 0; color: var(--landing-ink); background: #fff; font
 .landing-nav-links a:hover, .text-link:hover { color: var(--landing-orange); }
 .landing-signup { border-bottom: 1px solid var(--landing-ink); font-size: 14px; font-weight: 700; padding: 4px 0; }
 .landing-signup:hover { color: var(--landing-orange); border-color: var(--landing-orange); }
-.landing-hero { display: grid; grid-template-columns: minmax(300px, .82fr) minmax(520px, 1.18fr); align-items: center; gap: clamp(46px, 8vw, 110px); min-height: 720px; padding-top: 82px; padding-bottom: 92px; }
+.landing-hero { display: grid; grid-template-columns: minmax(600px, .95fr) minmax(520px, 1.18fr); align-items: center; gap: clamp(46px, 8vw, 110px); min-height: 720px; padding-top: 82px; padding-bottom: 92px; }
 .landing-eyebrow { display: flex; align-items: center; gap: 9px; margin: 0 0 20px; color: var(--landing-muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .eyebrow-dot { width: 8px; height: 8px; background: var(--landing-orange); border-radius: 50%; }
-.hero-copy h1 { max-width: 590px; margin: 0; font-family: "Space Grotesk", sans-serif; font-size: clamp(42px, 5.1vw, 72px); line-height: 1.03; font-weight: 600; }
+.hero-copy h1 { max-width: 680px; margin: 0; font-family: "Space Grotesk", sans-serif; font-size: clamp(42px, 5.1vw, 72px); line-height: 1.03; font-weight: 600; }
 .hero-lede { max-width: 470px; margin: 28px 0 0; color: var(--landing-muted); font-size: 18px; line-height: 1.6; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin-top: 34px; }
 .landing-button { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 12px 18px; border-radius: 5px; font-size: 14px; font-weight: 700; text-decoration: none; }
@@ -154,6 +154,11 @@ body.landing-body { margin: 0; color: var(--landing-ink); background: #fff; font
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *:before, *:after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+@media (max-width: 1320px) {
+  .landing-hero { grid-template-columns: 1fr; min-height: auto; padding-top: 70px; }
+  .hero-copy { max-width: 690px; }
+  .tour-frame { width: min(100%, 720px); margin-inline: auto; }
 }
 @media (max-width: 980px) {
   .landing-hero { grid-template-columns: 1fr; min-height: auto; padding-top: 70px; }
