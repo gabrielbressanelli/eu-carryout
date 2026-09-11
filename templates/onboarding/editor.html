@@ -1,0 +1,19 @@
+{% extends "onboarding/workspace.html" %}
+{% block workspace %}
+<section class="editor-surface">
+  <div class="section-heading"><h2>{% if editing %}Edit{% else %}Add{% endif %} {{ label }}</h2><a href="{{ back_url }}" class="icon-button" title="Close editor" aria-label="Close editor"><i data-lucide="x"></i></a></div>
+  <form method="post" enctype="multipart/form-data" class="onboarding-form">
+    {% csrf_token %}{% include "onboarding/fields.html" %}
+    <div class="form-actions"><a class="btn btn-outline-dark" href="{{ back_url }}">Cancel</a><button class="btn btn-dark" type="submit"><i data-lucide="check"></i> Save {{ label }}</button></div>
+  </form>
+  {% if editing and kind == 'item' %}
+  <section class="form-section"><div class="section-heading"><h3>Assigned modifier groups</h3><a class="btn btn-outline-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'link' %}?menu_item={{ record.pk }}"><i data-lucide="plus"></i> Assign group</a></div>
+    {% for link in record.modifier_groups.all %}<div class="record-row"><div class="record-main"><strong>{{ link.group.name }}</strong><small>{{ link.effective_min }} minimum · {% if link.effective_max %}{{ link.effective_max }} maximum{% else %}Unlimited{% endif %}</small></div>{% include "onboarding/row_actions.html" with kind="link" record=link %}</div>{% empty %}<p class="text-muted">No modifier groups assigned.</p>{% endfor %}
+  </section>
+  {% elif editing and kind == 'group' %}
+  <section class="form-section"><div class="section-heading"><h3>Options in this group</h3><a class="btn btn-outline-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'option' %}?group={{ record.pk }}"><i data-lucide="plus"></i> Add option</a></div>
+    {% for option in record.options.all %}<div class="record-row"><div class="record-main"><strong>{{ option.name }}</strong><small>${{ option.price_delta }}</small></div>{% include "onboarding/row_actions.html" with kind="option" record=option %}</div>{% empty %}<p class="text-muted">No options in this group.</p>{% endfor %}
+  </section>
+  {% endif %}
+</section>
+{% endblock %}

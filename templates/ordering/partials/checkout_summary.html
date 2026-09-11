@@ -1,0 +1,43 @@
+<div class="card">
+  <div class="card-header">
+    <h1 class="h4 mb-0">Order Summary</h1>
+  </div>
+  <div class="card-body">
+    {% for change in cart_changes %}<p class="cart-notice" role="status">{{ change }}</p>{% endfor %}
+    {% for line in lines %}
+      <div class="checkout-line">
+        <div>
+          <strong>{{ line.name }}</strong>
+          {% for option in line.options %}<div class="cart-option">{{ option.group }}: {{ option.name }}</div>{% endfor %}
+          {% if line.note %}<div class="cart-option">{{ line.note }}</div>{% endif %}
+          {% if line.error %}<p class="text-danger small">{{ line.error }}</p>{% endif %}
+          {% if line.item.is_active and line.item.category.is_active %}<button type="button" class="btn btn-sm btn-link p-0" data-customize-url="{% url 'item_options' tenant.slug line.item.pk %}?line_key={{ line.key }}">Edit selections</button>{% endif %}
+          <div class="text-muted">${{ line.unit_price }} x {{ line.quantity }}</div>
+          <form method="post" action="{% url 'cart_update' tenant_slug=tenant.slug %}" class="mt-2" data-cart-update-form>
+            {% csrf_token %}
+            <input type="hidden" name="line_index" value="{{ line.index }}">
+            <input type="hidden" name="line_key" value="{{ line.key }}">
+            <label class="visually-hidden" for="checkout-qty-{{ line.index }}">Quantity</label>
+            <input class="form-control form-control-sm qty-input" id="checkout-qty-{{ line.index }}" type="number" name="quantity" value="{{ line.quantity }}" min="0">
+          </form>
+        </div>
+        <div class="text-end">
+          <strong>${{ line.line_total }}</strong>
+          <form method="post" action="{% url 'cart_remove' tenant_slug=tenant.slug %}" class="mt-2" data-cart-remove-form>
+            {% csrf_token %}
+            <input type="hidden" name="line_index" value="{{ line.index }}">
+            <input type="hidden" name="line_key" value="{{ line.key }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+          </form>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-muted mb-0">Your cart is empty.</p>
+    {% endfor %}
+    <hr>
+    <div class="d-flex justify-content-between align-items-center">
+      <strong>Total</strong>
+      <strong>${{ total }}</strong>
+    </div>
+  </div>
+</div>

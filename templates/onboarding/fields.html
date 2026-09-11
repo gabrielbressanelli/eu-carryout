@@ -1,0 +1,25 @@
+{{ form.non_field_errors }}
+<div class="form-grid">
+{% for field in form %}
+  {% if field.is_hidden %}{{ field }}
+  {% elif field.field.widget.input_type == 'file' %}
+    <div class="field full-width">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      <div class="upload-zone" data-upload-zone>
+        <img class="upload-preview" data-upload-preview {% if field.name == 'logo' and form.instance.logo_src %}src="{{ form.instance.logo_src }}"{% elif field.name == 'image' and form.instance.image_src %}src="{{ form.instance.image_src }}"{% else %}hidden{% endif %} alt="Image preview">
+        <div class="upload-copy"><i data-lucide="image-plus"></i><span data-upload-name>Drop image here or choose file</span><small>JPG, PNG, WebP · Up to 5 MB</small></div>
+        {{ field }}
+      </div>
+      <button type="button" class="icon-button danger-action upload-remove" data-remove-image title="Remove image" aria-label="Remove image"><i data-lucide="trash-2"></i></button>
+      <p class="upload-error" data-upload-error role="alert"></p>
+      {{ field.errors }}
+    </div>
+  {% elif field.field.widget.input_type == 'checkbox' %}
+    <div class="field checkbox-field"><label class="form-check form-switch">{{ field }}<span class="form-check-label">{{ field.label }}</span></label>{{ field.errors }}</div>
+  {% else %}
+    <div class="field {% if field.name == 'description' or field.name == 'alias_text' %}full-width{% endif %}">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}
+    </div>
+  {% endif %}
+{% endfor %}
+</div>

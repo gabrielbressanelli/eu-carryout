@@ -1,0 +1,14 @@
+{% extends "onboarding/base.html" %}
+{% block title %}{% if tenant %}{{ tenant.name }}{% else %}Restaurant{% endif %} | Sign in{% endblock %}
+{% block content %}
+<section class="login-surface">
+  {% if tenant.logo_src %}<img src="{{ tenant.logo_src }}" alt="{{ tenant.name }}" class="login-logo">{% endif %}
+  <p class="section-kicker">Restaurant account</p>
+  <h1>{% if tenant %}{{ tenant.name }}{% else %}Sign in{% endif %}</h1>
+  <form method="post" class="onboarding-form">
+    {% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+    {% include "onboarding/fields.html" %}
+    <button class="btn btn-dark w-100" type="submit">Sign in <i data-lucide="arrow-right"></i></button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "onboarding/workspace.html" %}
+{% block workspace %}
+{% if section == 'overview' %}
+<section class="editor-surface">
+  <div class="section-heading"><h2>Business profile</h2><span class="status-pill {% if tenant.is_active %}is-on{% endif %}">{% if tenant.is_active %}Active{% else %}Inactive{% endif %}</span></div>
+  <form method="post" enctype="multipart/form-data" class="onboarding-form">
+    {% csrf_token %}<input type="hidden" name="action" value="business">
+    {% include "onboarding/fields.html" with form=tenant_form %}
+    <div class="form-actions"><button class="btn btn-dark" type="submit"><i data-lucide="check"></i> Save business</button></div>
+  </form>
+</section>
+{% elif section == 'hours' %}
+<section class="editor-surface">
+  <div class="section-heading"><h2>Ordering availability</h2></div>
+  <form method="post" class="onboarding-form">{% csrf_token %}<input type="hidden" name="action" value="ordering">
+    {% include "onboarding/fields.html" with form=ordering_form %}
+    <div class="form-actions"><button class="btn btn-dark"><i data-lucide="check"></i> Save availability</button></div>
+  </form>
+</section>
+<section>
+  <div class="section-heading"><h2>Business hours</h2></div>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hours">
+    {{ hours_formset.management_form }}{{ hours_formset.non_form_errors }}
+    <div class="hours-list">
+    {% for form in hours_formset %}
+      <div class="hours-row" data-hours-row>
+        {{ form.id }}{{ form.day_of_week }}
+        <strong class="hours-day">{{ form.instance.get_day_of_week_display }}</strong>
+        <div><label class="form-label" for="{{ form.opens_at.id_for_label }}">Open</label>{{ form.opens_at }}</div>
+        <div><label class="form-label" for="{{ form.closes_at.id_for_label }}">Close</label>{{ form.closes_at }}</div>
+        <label class="form-check form-switch hours-closed">{{ form.is_closed }}<span>Closed</span></label>
+        {% if form.errors %}<div class="field-errors">{{ form.errors }}</div>{% endif %}
+      </div>
+    {% endfor %}
+    </div>
+    <div class="form-actions"><button class="btn btn-dark"><i data-lucide="check"></i> Save hours</button></div>
+  </form>
+</section>
+<section class="form-section">
+  <div class="section-heading"><h2>Holidays and special hours</h2><a class="btn btn-outline-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'hours_override' %}"><i data-lucide="plus"></i> Add date</a></div>
+  {% for override in hours_overrides %}<div class="record-row"><div class="record-main"><strong>{{ override.date }}</strong><small>{% if override.is_closed %}Closed{% else %}{{ override.opens_at }} to {{ override.closes_at }}{% endif %} · {{ override.note }}</small></div>{% include "onboarding/row_actions.html" with kind="hours_override" record=override %}</div>{% empty %}<p class="text-muted">No special hours.</p>{% endfor %}
+</section>
+{% elif section == 'services' %}
+<section>
+  <div class="section-heading"><h2>Order services</h2></div>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="services">
+    {{ integration_formset.management_form }}{{ integration_formset.non_form_errors }}
+    {% for form in integration_formset %}
+    <article class="service-row" data-service-row>
+      {{ form.id }}{{ form.kind }}
+      <div class="section-heading"><h3>{{ form.instance.get_kind_display }}</h3><label class="form-check form-switch">{{ form.enabled }}<span>Enabled</span></label></div>
+      <div class="service-recipient">{% if form.instance.kind == 'email' %}Recipient: {{ tenant.business_email|default:"No business email set" }}{% elif form.instance.kind == 'sms' %}Recipient: {{ tenant.business_phone|default:"No business phone set" }}{% else %}Kitchen ticket{% endif %}</div>
+      <div class="form-grid"><div class="field"><label class="form-label" for="{{ form.endpoint_url.id_for_label }}">Webhook URL</label>{{ form.endpoint_url }}</div><div class="field"><label class="form-label" for="{{ form.auth_token.id_for_label }}">Authentication token</label>{{ form.auth_token }}</div></div>
+      {{ form.errors }}
+    </article>
+    {% endfor %}
+    <div class="form-actions"><button class="btn btn-dark"><i data-lucide="check"></i> Save services</button></div>
+  </form>
+</section>
+{% elif section == 'access' %}
+<section>
+  <div class="section-heading"><h2>Restaurant login access</h2></div>
+  <p><a href="{% url 'onboarding:restaurant_login' tenant.slug %}">/{{ tenant.slug }} restaurant sign-in <i data-lucide="external-link"></i></a></p>
+  <div class="record-list">
+    {% for membership in memberships %}<div class="record-row"><div class="record-main"><strong>{{ membership.user.username }}</strong><small>{{ membership.user.email }}</small></div><form method="post" data-confirm="Remove this person's access to this location?">{% csrf_token %}<input type="hidden" name="action" value="revoke_access"><input type="hidden" name="membership_id" value="{{ membership.pk }}"><button class="icon-button danger-action" title="Remove access for {{ membership.user.username }}" aria-label="Remove access for {{ membership.user.username }}"><i data-lucide="user-minus"></i></button></form></div>{% empty %}<p class="empty-state">No restaurant accounts assigned.</p>{% endfor %}
+  </div>
+  <form method="post" class="onboarding-form form-section">{% csrf_token %}<input type="hidden" name="action" value="access"><h3>Grant location access</h3>{% include "onboarding/fields.html" with form=access_form %}<div class="form-actions"><button class="btn btn-dark"><i data-lucide="user-plus"></i> Grant access</button></div></form>
+</section>
+{% else %}
+<section>
+  <div class="section-heading">
+    {% if section == 'menu' %}<h2>Menu items</h2><a class="btn btn-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'item' %}"><i data-lucide="plus"></i> Add item</a>
+    {% elif section == 'categories' %}<h2>Categories</h2><a class="btn btn-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'category' %}"><i data-lucide="plus"></i> Add category</a>
+    {% elif section == 'modifiers' %}<h2>Modifier groups</h2><a class="btn btn-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'group' %}"><i data-lucide="plus"></i> Add group</a>
+    {% elif section == 'options' %}<h2>Modifier options</h2><a class="btn btn-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'option' %}"><i data-lucide="plus"></i> Add option</a>
+    {% elif section == 'links' %}<h2>Item assignments</h2><a class="btn btn-dark" href="{% url 'onboarding:catalog_create' tenant.slug 'link' %}"><i data-lucide="plus"></i> Assign group</a>{% endif %}
+  </div>
+  <div class="list-toolbar"><label class="search-control"><i data-lucide="search"></i><input type="search" placeholder="Search" aria-label="Search current list" data-list-search></label></div>
+  <div class="record-list" data-search-list>
+    {% if section == 'menu' %}
+      {% for item in menu_items %}<article class="record-row" data-search-row>
+        {% if item.image_src %}<img class="menu-thumbnail" src="{{ item.image_src }}" alt="">{% else %}<span class="menu-thumbnail thumbnail-placeholder"><i data-lucide="utensils"></i></span>{% endif %}
+        <div class="record-main"><strong>{{ item.name }}</strong><small>{{ item.category.name }}{% for link in item.modifier_groups.all %} · {{ link.group.name }}{% endfor %}</small></div>
+        <span class="record-price">${{ item.price }}</span><span class="status-pill {% if item.is_active %}is-on{% endif %}">{% if item.is_active %}Available{% else %}Hidden{% endif %}</span>
+        {% include "onboarding/row_actions.html" with kind="item" record=item %}
+      </article>{% empty %}<div class="empty-state"><h3>No menu items yet</h3><a href="{% url 'onboarding:catalog_create' tenant.slug 'item' %}">Add your first item</a></div>{% endfor %}
+    {% elif section == 'categories' %}
+      {% for category in categories %}<article class="record-row" data-search-row><div class="record-main"><strong>{{ category.name }}</strong><small>{{ category.items.count }} items · Position {{ category.sort_order }}</small></div><span class="status-pill {% if category.is_active %}is-on{% endif %}">{% if category.is_active %}Active{% else %}Hidden{% endif %}</span>{% include "onboarding/row_actions.html" with kind="category" record=category %}</article>{% empty %}<div class="empty-state"><h3>No categories yet</h3><a href="{% url 'onboarding:catalog_create' tenant.slug 'category' %}">Add a category</a></div>{% endfor %}
+    {% elif section == 'modifiers' %}
+      {% for group in modifier_groups %}<article class="record-row" data-search-row><div class="record-main"><strong>{{ group.name }}</strong><small>{{ group.options.count }} options · {{ group.menuitemmodifiergroup_set.count }} items · {{ group.min_choices }} minimum · {% if group.max_choices %}{{ group.max_choices }} maximum{% else %}Unlimited{% endif %}</small></div><span class="status-pill">{% if group.required %}Required{% else %}Optional{% endif %}</span>{% include "onboarding/row_actions.html" with kind="group" record=group %}</article>{% empty %}<div class="empty-state"><h3>No modifier groups yet</h3><a href="{% url 'onboarding:catalog_create' tenant.slug 'group' %}">Add a group</a></div>{% endfor %}
+    {% elif section == 'options' %}
+      {% for option in options %}<article class="record-row" data-search-row><div class="record-main"><strong>{{ option.name }}</strong><small>{{ option.group.name }}</small></div><span class="record-price">${{ option.price_delta }}</span><span class="status-pill {% if option.is_active %}is-on{% endif %}">{% if option.is_active %}Available{% else %}Hidden{% endif %}</span>{% include "onboarding/row_actions.html" with kind="option" record=option %}</article>{% empty %}<div class="empty-state"><h3>No modifier options yet</h3><a href="{% url 'onboarding:catalog_create' tenant.slug 'option' %}">Add an option</a></div>{% endfor %}
+    {% elif section == 'links' %}
+      {% for link in item_links %}<article class="record-row" data-search-row><div class="record-main"><strong>{{ link.menu_item.name }} <i data-lucide="arrow-right"></i> {{ link.group.name }}</strong><small>{{ link.effective_min }} minimum · {% if link.effective_max %}{{ link.effective_max }} maximum{% else %}Unlimited{% endif %} · {% if link.effective_required %}Required{% else %}Optional{% endif %}</small></div>{% include "onboarding/row_actions.html" with kind="link" record=link %}</article>{% empty %}<div class="empty-state"><h3>No groups assigned to items</h3><a href="{% url 'onboarding:catalog_create' tenant.slug 'link' %}">Assign a modifier group</a></div>{% endfor %}
+    {% endif %}
+    <p class="search-empty" data-search-empty hidden>No matching records.</p>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

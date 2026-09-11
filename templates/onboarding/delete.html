@@ -1,0 +1,13 @@
+{% extends "onboarding/workspace.html" %}
+{% block workspace %}
+<section class="editor-surface delete-surface">
+  <i data-lucide="trash-2"></i><h2>Delete {{ label }}?</h2>
+  <p class="delete-name">{{ object }}</p>
+  {% if kind == 'group' %}<p>This also removes its options and assignments from menu items.</p>
+  {% elif kind == 'link' %}<p>The modifier group and its options will remain available.</p>
+  {% elif kind == 'category' %}<p>A category can only be deleted when it contains no menu items.</p>
+  {% else %}<p>This action cannot be undone.</p>{% endif %}
+  {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+  <form method="post">{% csrf_token %}<div class="form-actions"><a class="btn btn-outline-dark" href="{{ back_url }}">Cancel</a>{% if not error %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete {{ label }}</button>{% endif %}</div></form>
+</section>
+{% endblock %}

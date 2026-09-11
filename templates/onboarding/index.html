@@ -1,0 +1,21 @@
+{% extends "onboarding/base.html" %}
+{% block title %}Your locations | Carryout{% endblock %}
+{% block content %}
+<header class="onboarding-header">
+  <div><p class="section-kicker">Restaurant workspace</p><h1>Your locations</h1></div>
+  {% if user.is_superuser %}<a class="btn btn-dark" href="{% url 'onboarding:restaurant_create' %}"><i data-lucide="plus"></i> Add restaurant</a>{% endif %}
+</header>
+<div class="list-toolbar"><span>{{ tenants|length }} location{{ tenants|length|pluralize }}</span><label class="search-control"><i data-lucide="search"></i><input type="search" placeholder="Search locations" aria-label="Search locations" data-list-search></label></div>
+<div class="location-list" data-search-list>
+  {% for location in tenants %}
+  <a class="location-row" href="{% url 'onboarding:restaurant_manage' location.slug %}" data-search-row>
+    {% if location.logo_src %}<img class="location-logo" src="{{ location.logo_src }}" alt="">{% else %}<span class="location-initial">{{ location.name|first }}</span>{% endif %}
+    <div class="location-name"><h2>{{ location.name }}</h2><span>{{ location.business_email|default:location.slug }}</span></div>
+    <div class="location-meta">{{ location.menu_items.count }} menu item{{ location.menu_items.count|pluralize }}</div>
+    <span class="status-pill {% if location.is_active %}is-on{% endif %}">{% if location.is_active %}Active{% else %}Inactive{% endif %}</span>
+    <i data-lucide="arrow-right"></i>
+  </a>
+  {% empty %}<div class="empty-state"><i data-lucide="map-pin"></i><h2>No locations assigned</h2><p>Contact your account administrator for access.</p></div>{% endfor %}
+  <p class="search-empty" data-search-empty hidden>No matching locations.</p>
+</div>
+{% endblock %}

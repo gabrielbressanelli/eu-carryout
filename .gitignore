@@ -1,0 +1,20 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Codex instructions
+AGENT.MD
+
+# Variables
+.env
+
+#local db
+db.sqlite
+
+# Virtual Environ
+.venv
+

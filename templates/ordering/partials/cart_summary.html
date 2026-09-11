@@ -1,0 +1,54 @@
+{% for change in cart_changes %}<p class="cart-notice" role="status">{{ change }}</p>{% endfor %}
+{% if cart_lines %}
+  <div class="cart-lines">
+    {% for line in cart_lines %}
+      <div class="cart-line" data-cart-line>
+        <div class="cart-line-main">
+          <div class="cart-line-title">{{ line.name }}</div>
+          {% for option in line.options %}<div class="cart-option">{{ option.group }}: {{ option.name }}</div>{% endfor %}
+          {% if line.note %}<div class="cart-option">{{ line.note }}</div>{% endif %}
+          {% if line.error %}<p class="text-danger small">{{ line.error }}</p>{% endif %}
+          {% if line.item.is_active and line.item.category.is_active %}<button type="button" class="btn btn-sm btn-link p-0" data-customize-url="{% url 'item_options' tenant.slug line.item.pk %}?line_key={{ line.key }}">Edit selections</button>{% endif %}
+          <div class="cart-line-price">${{ line.unit_price }} each</div>
+          <form class="cart-line-qty-form" method="post" action="{% url 'cart_update' tenant_slug=tenant.slug %}" data-cart-update-form>
+            {% csrf_token %}
+            <input type="hidden" name="line_index" value="{{ line.index }}">
+            <input type="hidden" name="line_key" value="{{ line.key }}">
+            <label class="visually-hidden" for="cart-qty-{{ line.index }}">Quantity</label>
+            <input
+              id="cart-qty-{{ line.index }}"
+              class="form-control form-control-sm cart-qty-input"
+              type="number"
+              name="quantity"
+              value="{{ line.quantity }}"
+              min="0"
+              max="99"
+            >
+          </form>
+        </div>
+        <div class="cart-line-side">
+          <div class="cart-line-total">${{ line.line_total }}</div>
+          <form method="post" action="{% url 'cart_remove' tenant_slug=tenant.slug %}" data-cart-remove-form>
+            {% csrf_token %}
+            <input type="hidden" name="line_index" value="{{ line.index }}">
+            <input type="hidden" name="line_key" value="{{ line.key }}">
+            <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="cart-footer">
+    <div class="cart-total-row">
+      <span>Total</span>
+      <strong data-cart-total>${{ cart_total }}</strong>
+    </div>
+    <a class="btn btn-dark w-100" href="{% url 'checkout' tenant_slug=tenant.slug %}">Checkout</a>
+  </div>
+{% else %}
+  <div class="cart-empty">
+    <h6>Your cart is empty</h6>
+    <p class="text-muted mb-0">Add menu items and they will appear here.</p>
+  </div>
+{% endif %}

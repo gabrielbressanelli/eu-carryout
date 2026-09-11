@@ -1,0 +1,124 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Carryout is the restaurant ordering platform from Eusocial. Launch a branded ordering website and connect the tools your team already uses.">
+  <title>Carryout by Eusocial | Online ordering for restaurants</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/landing.css' %}">
+</head>
+<body class="landing-body">
+  <nav class="landing-nav" aria-label="Main navigation">
+    <div class="landing-width nav-inner">
+      <a class="eusocial-wordmark" href="#top" aria-label="Carryout by Eusocial">
+        <span class="wordmark-mark" aria-hidden="true">eu</span>
+        <span>Carryout</span>
+      </a>
+      <div class="landing-nav-links">
+        <a href="#product">Product</a>
+        <a href="#connections">Connections</a>
+        <a href="#hosthub">HostHub</a>
+        <a href="#process">How it works</a>
+      </div>
+      <div class="landing-nav-actions">
+        <a class="landing-login" href="{% url 'onboarding:login' %}">Log in</a>
+        <a class="landing-signup signup-placeholder" href="#signup">Sign up</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="top">
+    <section class="landing-hero landing-width">
+      <div class="hero-copy">
+        <p class="landing-eyebrow"><span class="eyebrow-dot"></span> By Eusocial</p>
+        <h1>Your restaurant’s ordering system, built around the way you work.</h1>
+        <p class="hero-lede">A branded ordering website, flexible menus, and the workflows that keep every paid order moving.</p>
+        <div class="hero-actions">
+          <a class="landing-button landing-button-dark signup-placeholder" href="#signup">Sign up</a>
+          <a class="text-link" href="#product">See how it works <span aria-hidden="true">→</span></a>
+        </div>
+        <p class="hero-note">Talk to Eusocial about a tailored setup and quote.</p>
+      </div>
+
+      <div class="tour-frame" aria-label="Autoplay product tour showing how Carryout works" data-tour>
+        <div class="tour-window-bar">
+          <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+          <span class="tour-location"><span class="tour-live-dot"></span> carryout / restaurant setup</span>
+          <span class="tour-step-count" data-tour-count>01 / 05</span>
+        </div>
+        <div class="tour-stage">
+          <div class="tour-scene scene-setup" data-scene="0">
+            <div class="scene-heading"><span class="scene-icon orange">✦</span><div><span class="scene-label">Restaurant setup</span><strong>Create a location</strong></div></div>
+            <div class="mock-form"><div class="mock-label">Restaurant name</div><div class="mock-input typing" data-typing>Riverside Kitchen<span class="cursor"></span></div><div class="mock-row"><div><div class="mock-label">Ordering URL</div><div class="mock-input">riverside-kitchen</div></div><div><div class="mock-label">Timezone</div><div class="mock-input">America / Detroit</div></div></div><div class="mock-action">Continue <span>→</span></div></div>
+          </div>
+          <div class="tour-scene scene-menu" data-scene="1">
+            <div class="scene-heading"><span class="scene-icon orange">☷</span><div><span class="scene-label">Menu configuration</span><strong>Shape the menu</strong></div></div>
+            <div class="menu-builder"><div class="menu-builder-side"><span class="side-active">Menu</span><span>Categories</span><span>Modifier groups</span></div><div class="menu-builder-main"><div class="builder-top"><b>Entrees</b><span class="mock-action small">+ Add item</span></div><div class="builder-item"><span class="food-thumb">🍝</span><span><b>Rigatoni</b><small>Roasted tomato, basil, parmesan</small></span><em>$20.00</em></div><div class="builder-item muted-row"><span class="food-thumb light">✦</span><span><b>Modifiers</b><small>Portion · Extras</small></span><em>2 groups</em></div></div></div>
+          </div>
+          <div class="tour-scene scene-modifier" data-scene="2">
+            <div class="scene-heading"><span class="scene-icon orange">½</span><div><span class="scene-label">Pricing that makes sense</span><strong>Portions and add-ons</strong></div></div>
+            <div class="modifier-builder"><div class="modifier-title"><span>Portion</span><small>Required · choose 1</small></div><div class="modifier-option"><span class="option-radio selected"></span><span>Full portion</span><strong>$20.00</strong></div><div class="modifier-option highlighted"><span class="option-radio"></span><span>Half portion</span><strong>0.50 × base</strong></div><div class="modifier-option"><span class="option-radio"></span><span>Extra cheese</span><strong>+ $3.00</strong></div><div class="price-calculation"><span>$20.00 × 0.50 + $3.00</span><strong>$13.00</strong></div></div>
+          </div>
+          <div class="tour-scene scene-customer" data-scene="3">
+            <div class="scene-heading"><span class="scene-icon orange">↗</span><div><span class="scene-label">Customer experience</span><strong>Ready to order</strong></div></div>
+            <div class="customer-preview"><div class="customer-nav"><b>Riverside Kitchen</b><span>Menu</span><span class="customer-cart">Cart <i>2</i></span></div><div class="customer-content"><div><small>ENTREES</small><h4>Rigatoni</h4><p>Roasted tomato, basil, parmesan.</p></div><div class="customer-price">$13.00</div></div><div class="customer-footer"><span>Half portion · Extra cheese</span><b>Add to cart</b></div></div>
+          </div>
+          <div class="tour-scene scene-workflow" data-scene="4">
+            <div class="scene-heading"><span class="scene-icon orange">✓</span><div><span class="scene-label">After payment</span><strong>Everyone gets the signal</strong></div></div>
+            <div class="workflow-map"><div class="workflow-node customer-node"><span>Customer</span><strong>Paid order</strong></div><div class="workflow-line"><i></i><i></i><i></i></div><div class="workflow-destinations"><div><span class="destination-icon">▤</span><b>Kitchen</b><small>Ticket printed</small></div><div><span class="destination-icon">✉</span><b>Email</b><small>Email Sent</small></div><div><span class="destination-icon">⌁</span><b>SMS</b><small>SMS sent</small></div></div></div>
+          </div>
+        </div>
+        <div class="tour-footer"><div class="tour-progress" aria-hidden="true"><span data-progress="0"></span><span data-progress="1"></span><span data-progress="2"></span><span data-progress="3"></span><span data-progress="4"></span></div><span data-tour-caption>Set up a new restaurant in one clear workspace.</span></div>
+      </div>
+    </section>
+
+    <section id="product" class="product-intro landing-width">
+      <p class="landing-eyebrow">One system for the whole order</p>
+      <p class="section-statement">From menu setup to kitchen ticket, Carryout keeps the handoff clear.</p>
+      <div class="feature-rail">
+        <article><span class="feature-number">01</span><h2>Branded ordering</h2><p>Your restaurant gets its own customer-facing ordering experience, reached by its own URL.</p></article>
+        <article><span class="feature-number">02</span><h2>Flexible menus</h2><p>Manage items, portions, required choices, add-ons, and prices without rebuilding the menu.</p></article>
+        <article><span class="feature-number">03</span><h2>Connected operations</h2><p>Send paid orders to the kitchen and the communication tools your team already relies on.</p></article>
+      </div>
+    </section>
+
+    <section id="connections" class="connections-band">
+      <div class="landing-width connections-layout">
+        <div><p class="landing-eyebrow">Fits the restaurant you already run</p><p class="section-statement">Payment starts the workflow. Your team gets the order where it belongs.</p></div>
+        <div class="connection-flow"><span>Carryout</span><i>→</i><span>Payment</span><i>→</i><span>Kitchen</span><i>+</i><span>Your Systems</span></div>
+      </div>
+    </section>
+
+    <section id="hosthub" class="hosthub-section landing-width">
+      <div class="hosthub-copy">
+        <p class="landing-eyebrow"><span class="eyebrow-dot"></span> Another Eusocial tool</p>
+        <p class="section-statement">Let HostHub handle the phone. Let Carryout handle the order.</p>
+        <p class="process-text">Connect your restaurant’s voice AI agent to the same menu, locations, and operating rules. Calls become organized requests your team can act on, without building another system from scratch.</p>
+        <a class="text-link" href="#signup">Talk to Eusocial <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="hosthub-flow" aria-label="HostHub and Carryout integration flow">
+        <div class="hosthub-flow-node call-node"><span class="node-icon">◌</span><div><small>Incoming call</small><b>“I’d like to place an order.”</b></div></div>
+        <div class="hosthub-flow-connector"><i></i><span>HostHub</span><i></i></div>
+        <div class="hosthub-flow-node agent-node"><span class="node-icon">✦</span><div><small>Voice AI agent</small><b>Recognizes the restaurant and location</b></div></div>
+        <div class="hosthub-flow-connector"><i></i><span>Carryout</span><i></i></div>
+        <div class="hosthub-flow-node order-node"><span class="node-icon">✓</span><div><small>Order workflow</small><b>Menu, modifiers, payment, kitchen</b></div></div>
+      </div>
+    </section>
+
+    <section id="process" class="process-section landing-width">
+      <div class="process-copy"><p class="landing-eyebrow">A clearer way to get started</p><p class="section-statement">You bring the restaurant. <br>Eusocial brings the setup.</p><p class="process-text">Tell us how your restaurant operates, and we’ll shape the ordering experience, menu rules, and post-payment connections around it.</p></div>
+      <div class="process-list"><div><span>1</span><p><b>Share your restaurant details</b><small>Menu, hours, branding, and the tools your team uses.</small></p></div><div><span>2</span><p><b>Review your ordering experience</b><small>We configure the customer flow and operational handoffs.</small></p></div><div><span>3</span><p><b>Go live with a system that fits</b><small>Your restaurant has a clear path from payment to preparation.</small></p></div></div>
+    </section>
+
+    <section id="signup" class="signup-band">
+      <div class="landing-width signup-inner"><p class="landing-eyebrow">Carryout by Eusocial</p><p class="section-statement">Ready to talk through your restaurant?</p><p>Sign up to continue to the Eusocial platform.</p><a class="landing-button landing-button-dark signup-placeholder" href="#signup">Sign up</a></div>
+    </section>
+  </main>
+  <footer class="landing-footer landing-width"><span>© {% now "Y" %} Eusocial</span><span>Carryout ordering platform</span></footer>
+  <script src="{% static 'js/landing.js' %}"></script>
+</body>
+</html>
