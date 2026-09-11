@@ -30,10 +30,18 @@ ENVIRONMENT = os.environ.get('ENVIRONMENT', 'production')
 DEBUG = ENVIRONMENT == 'local'
 
 if ENVIRONMENT == 'production':
-    ALLOWED_HOSTS = [''] # stil to be set
+    ALLOWED_HOSTS = [    
+    "carryout-production.up.railway.app",
+    "carryout.online",
+    "www.carryout.online",] # stil to be set
 else:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".localhost", "testserver"]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://carryout-production.up.railway.app",
+    "https://carryout.online",
+    "https://www.carryout.online",
+]
 
 # Application definition
 
