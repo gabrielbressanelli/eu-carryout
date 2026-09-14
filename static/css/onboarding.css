@@ -55,8 +55,14 @@ h3 { font-size:17px; font-weight:700; margin:0; }
 .search-control { display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:5px; padding:9px 12px; max-width:100%; width:300px; }
 .search-control input { border:0; outline:0; background:transparent; width:100%; min-width:0; }
 .record-list,.location-list { border-top:1px solid var(--line); }
+.account-location-group { padding:22px 0 8px; border-bottom:1px solid var(--line); }
+.account-location-group:last-of-type { border-bottom:0; }
+.account-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 12px 10px; }
+.account-heading h2 { font-size:16px; }
+.account-heading span { color:var(--muted); font-size:13px; white-space:nowrap; }
 .record-row,.location-row { display:flex; align-items:center; gap:16px; padding:18px 0; border-bottom:1px solid var(--line); min-width:0; }
 .location-row { color:var(--ink); text-decoration:none; padding:24px 12px; }
+.account-location-group .location-row:last-child { border-bottom:0; }
 .location-row:hover { background:var(--wash); }
 .location-name,.record-main { flex:1; min-width:0; overflow-wrap:anywhere; }
 .location-name h2 { font-size:18px; margin-bottom:6px; }

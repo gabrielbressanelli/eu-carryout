@@ -4,6 +4,7 @@
 <header class="onboarding-header"><div><p class="section-kicker">New location</p><h1>Add restaurant</h1></div><a href="{% url 'onboarding:restaurant_list' %}" class="btn btn-outline-dark">Cancel</a></header>
 <form method="post" enctype="multipart/form-data" class="onboarding-form editor-surface">
   {% csrf_token %}
+  <section class="form-section"><h2>Account</h2>{% include "onboarding/fields.html" with form=account_form %}</section>
   <section class="form-section"><h2>Restaurant details</h2>{% include "onboarding/fields.html" %}</section>
   <section class="form-section"><h2>Restaurant login</h2>{% include "onboarding/fields.html" with form=access_form %}</section>
   <div class="form-actions"><button class="btn btn-dark" type="submit">Create restaurant <i data-lucide="arrow-right"></i></button></div>

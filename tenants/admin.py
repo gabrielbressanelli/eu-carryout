@@ -1,7 +1,33 @@
 from django.contrib import admin
 
-from .models import BusinessHour, IntegrationEvent, Tenant, TenantDomain, TenantIntegration, TenantMembership
+from .models import Account, AccountMembership, BusinessHour, IntegrationEvent, Tenant, TenantDomain, TenantIntegration, TenantMembership
 from .models import HoursOverride
+
+
+class AccountMembershipInline(admin.TabularInline):
+    model = AccountMembership
+    extra = 0
+    autocomplete_fields = ("user",)
+
+
+@admin.register(Account)
+class AccountAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "restaurant_count", "created_at")
+    search_fields = ("name", "slug")
+    prepopulated_fields = {"slug": ("name",)}
+    inlines = [AccountMembershipInline]
+
+    def restaurant_count(self, obj):
+        return obj.restaurants.count()
+
+
+@admin.register(AccountMembership)
+class AccountMembershipAdmin(admin.ModelAdmin):
+    list_display = ("user", "account", "role", "created_at")
+    list_filter = ("role", "account")
+    search_fields = ("user__username", "user__email", "account__name", "account__slug")
+    autocomplete_fields = ("user", "account")
+
 
 @admin.register(HoursOverride)
 class HoursOverrideAdmin(admin.ModelAdmin):
@@ -12,7 +38,7 @@ class HoursOverrideAdmin(admin.ModelAdmin):
 @admin.register(TenantMembership)
 class TenantMembershipAdmin(admin.ModelAdmin):
     list_display = ("user", "tenant", "created_at")
-    search_fields = ("user__username", "tenant__name")
+    search_fields = ("user__username", "user__email", "tenant__name")
     autocomplete_fields = ("user", "tenant")
 
 
@@ -33,9 +59,10 @@ class BusinessHourInline(admin.TabularInline):
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "primary_domain", "business_email", "business_phone", "is_active")
-    list_filter = ("is_active",)
-    search_fields = ("name", "slug", "primary_domain", "business_email", "business_phone")
+    list_display = ("name", "account", "slug", "primary_domain", "business_email", "business_phone", "is_active")
+    list_filter = ("account", "is_active")
+    search_fields = ("name", "slug", "account__name", "primary_domain", "business_email", "business_phone")
+    autocomplete_fields = ("account",)
     prepopulated_fields = {"slug": ("name",)}
     inlines = [TenantDomainInline, BusinessHourInline, TenantIntegrationInline]
 

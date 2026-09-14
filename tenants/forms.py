@@ -2,11 +2,15 @@ from django import forms
 from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.forms import modelformset_factory
+from django.utils.text import slugify
 
 from catalog.models import MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
 
-from .models import BusinessHour, Tenant, TenantIntegration, TenantMembership, HoursOverride
+from .access import can_manage_account, manageable_accounts
+from .models import Account, AccountMembership, BusinessHour, Tenant, TenantIntegration, TenantMembership, HoursOverride
 from .uploads import RestaurantImageField
+
+RESERVED_SLUGS = {"admin", "api", "onboarding", "static", "media", "stripe", "restaurants", "login", "logout"}
 
 
 class RestaurantLoginForm(AuthenticationForm):
@@ -20,7 +24,12 @@ class RestaurantLoginForm(AuthenticationForm):
 
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
-        if self.tenant and not user.is_superuser and not user.restaurant_memberships.filter(tenant=self.tenant).exists():
+        if (
+            self.tenant
+            and not user.is_superuser
+            and not user.restaurant_memberships.filter(tenant=self.tenant).exists()
+            and not user.account_memberships.filter(account=self.tenant.account).exists()
+        ):
             raise self.get_invalid_login_error()
 
 
@@ -64,8 +73,72 @@ class RestaurantAccessForm(forms.Form):
         return self.account
 
 
+class RestaurantAccountForm(forms.Form):
+    account = forms.ModelChoiceField(required=False, queryset=Account.objects.none(), label="Account", widget=forms.Select(attrs={"class": "form-select"}))
+    account_name = forms.CharField(required=False, max_length=120, label="New account name", widget=forms.TextInput(attrs={"class": "form-control"}))
+    account_slug = forms.SlugField(required=False, max_length=80, label="New account URL key", widget=forms.TextInput(attrs={"class": "form-control"}))
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self.created_account = False
+        accounts = manageable_accounts(user).order_by("name") if user else Account.objects.none()
+        self.fields["account"].queryset = accounts
+        if not user or not user.is_superuser:
+            self.fields["account_name"].disabled = True
+            self.fields["account_slug"].disabled = True
+            self.fields["account_name"].help_text = "Only platform admins can create new accounts."
+            self.fields["account_slug"].help_text = "Only platform admins can create new accounts."
+        if accounts.count() == 1:
+            self.fields["account"].initial = accounts.first()
+
+    def clean(self):
+        cleaned = super().clean()
+        account = cleaned.get("account")
+        account_name = (cleaned.get("account_name") or "").strip()
+        account_slug = (cleaned.get("account_slug") or "").strip().lower()
+        if account and account_name:
+            self.add_error("account_name", "Choose an existing account or create a new one, not both.")
+        if account:
+            if not can_manage_account(self.user, account):
+                self.add_error("account", "Choose an account you can manage.")
+            return cleaned
+        if not getattr(self.user, "is_superuser", False):
+            self.add_error("account", "Choose the account this restaurant belongs to.")
+            return cleaned
+        if not account_name:
+            self.add_error("account_name", "Enter an account name.")
+            return cleaned
+        slug = account_slug or slugify(account_name)[:80]
+        if not slug or slug in RESERVED_SLUGS:
+            self.add_error("account_slug", "Choose another account URL key.")
+        elif Account.objects.filter(slug=slug).exists():
+            self.add_error("account_slug", "This account URL key is already in use.")
+        cleaned["account_slug"] = slug
+        return cleaned
+
+    def save(self):
+        account = self.cleaned_data.get("account")
+        if account:
+            self.created_account = False
+            return account
+        self.created_account = True
+        return Account.objects.create(
+            name=self.cleaned_data["account_name"].strip(),
+            slug=self.cleaned_data["account_slug"],
+        )
+
+    def grant_owner_if_created(self, user, account):
+        if self.created_account and user:
+            AccountMembership.objects.get_or_create(
+                user=user,
+                account=account,
+                defaults={"role": AccountMembership.ROLE_OWNER},
+            )
+
+
 class TenantOnboardingForm(forms.ModelForm):
-    logo = RestaurantImageField(label="Restaurant logo")
+    logo = RestaurantImageField(label="Restaurant logo", kind="logo")
     remove_logo = forms.BooleanField(required=False, widget=forms.HiddenInput(attrs={"data-remove-image-value": ""}))
 
     def save(self, commit=True):
@@ -78,9 +151,8 @@ class TenantOnboardingForm(forms.ModelForm):
         return tenant
 
     def clean_slug(self):
-        from django.utils.text import slugify
         slug = (self.cleaned_data.get("slug") or slugify(self.cleaned_data.get("name", ""))).lower()
-        if not slug or slug in {"admin", "api", "onboarding", "static", "media", "stripe", "restaurants", "login", "logout"}:
+        if not slug or slug in RESERVED_SLUGS:
             raise forms.ValidationError("Choose another restaurant URL.")
         if Tenant.objects.filter(slug=slug).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("This restaurant URL is already in use.")
@@ -203,7 +275,7 @@ class MenuCategoryForm(forms.ModelForm):
 
 
 class MenuItemForm(forms.ModelForm):
-    image = RestaurantImageField(label="Menu photo")
+    image = RestaurantImageField(label="Menu photo", kind="menu_item")
     remove_image = forms.BooleanField(required=False, widget=forms.HiddenInput(attrs={"data-remove-image-value": ""}))
     alias_text = forms.CharField(
         required=False,

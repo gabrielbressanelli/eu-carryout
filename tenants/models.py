@@ -7,7 +7,26 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from .uploads import logo_upload_path
 
 
+class Account(models.Model):
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=80, unique=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)[:80]
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
 class Tenant(models.Model):
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="restaurants")
     ordering_paused = models.BooleanField(default=False)
     closure_message = models.CharField(max_length=250, blank=True, default="")
     preparation_minutes = models.PositiveIntegerField(default=20, validators=[MinValueValidator(1), MaxValueValidator(240)])
@@ -33,6 +52,12 @@ class Tenant(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)[:80]
+        if not self.account_id:
+            account, _ = Account.objects.get_or_create(
+                slug=self.slug,
+                defaults={"name": self.name},
+            )
+            self.account = account
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -53,6 +78,26 @@ class TenantMembership(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.tenant}"
+
+
+class AccountMembership(models.Model):
+    ROLE_OWNER = "owner"
+    ROLE_ADMIN = "admin"
+    ROLE_CHOICES = [
+        (ROLE_OWNER, "Owner"),
+        (ROLE_ADMIN, "Admin"),
+    ]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="account_memberships")
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="memberships")
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES, default=ROLE_ADMIN)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "account"], name="unique_account_member")]
+
+    def __str__(self):
+        return f"{self.user} - {self.account} ({self.get_role_display()})"
 
 
 class TenantDomain(models.Model):

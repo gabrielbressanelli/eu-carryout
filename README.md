@@ -13,6 +13,7 @@ Multi-tenant Django ordering service for restaurant carryout websites.
 - Post-payment workflow dispatches enabled integrations through configured HTTP endpoints.
 - Integration attempts are logged so Stripe webhook retries do not duplicate sent notifications.
 - Tenant-scoped agent ordering API for menu search, call carts, and order-summary totals.
+- Account-scoped restaurant groups, with account admins able to add locations and restaurant users scoped to assigned locations.
 - Restaurant login with explicit access to assigned locations, plus separate editors for business settings and menu configuration.
 - Logo and menu photo uploads, with local storage or Cloudflare R2.
 - Public product landing page at `/` with Eusocial branding, signup placeholder CTAs, and an autoplay Carryout product tour.
@@ -24,7 +25,7 @@ Multi-tenant Django ordering service for restaurant carryout websites.
 ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/python manage.py migrate
 ./.venv/bin/python manage.py createsuperuser
-./.venv/bin/python manage.py create_restaurant one-sixty-main --name "160 Main"
+./.venv/bin/python manage.py create_restaurant one-sixty-main --name "160 Main" --account one-sixty-group --account-name "One Sixty Group"
 ./.venv/bin/python manage.py create_agent_token one-sixty-main --name "Local Voice Agent"
 ./.venv/bin/python manage.py runserver 127.0.0.1:8000
 ```
@@ -33,7 +34,7 @@ Open `http://127.0.0.1:8000/one-sixty-main/`.
 
 The product landing page is at `http://127.0.0.1:8000/`. Its signup buttons currently scroll to the signup section as a placeholder; connect them to the Eusocial signup URL when that destination is ready.
 
-Restaurant settings start at `/onboarding/`, with a simple login at `/onboarding/login/`. A platform superuser creates restaurant accounts and assigns location access. Ordinary restaurant accounts do not require Django staff permissions.
+Restaurant settings start at `/onboarding/`, with a simple login at `/onboarding/login/`. A platform superuser creates accounts and the first restaurant/location for each account. Account admins can add more restaurants under accounts they manage, while restaurant users only see the locations assigned to them. Ordinary restaurant accounts do not require Django staff permissions.
 
 ## Environment
 
@@ -65,13 +66,13 @@ Use `/onboarding/` to create and configure restaurant tenants. The setup page su
 
 Each settings area has its own view. Categories, items, groups, options, and assignments have separate create/edit pages and explicit delete confirmation. Protected records used by orders cannot be deleted; hide the item instead. Editing a group shows its options, and editing an item shows its assigned groups.
 
-New restaurant creation also creates or assigns a login. Under a location's **Login access** tab, a superuser can grant an existing username access to more locations or revoke access. `/onboarding/<restaurant-slug>/login/` shows that restaurant's identity. After login, users choose from only their assigned locations. Memberships can also be managed in Django Admin. Existing staff accounts need a membership unless they are superusers.
+New restaurant creation also creates or assigns a login. Each restaurant belongs to an account, and the location list groups restaurants by account. Under a location's **Login access** tab, account admins and platform superusers can grant an existing username access to that location or revoke access. `/onboarding/<restaurant-slug>/login/` shows that restaurant's identity. After login, users choose from only their assigned locations, unless they are account admins for the parent account. Account memberships and restaurant memberships can also be managed in Django Admin. Existing staff accounts need a membership unless they are superusers.
 
 ## Image Storage
 
-Restaurant logos and menu photos accept JPG, PNG, and WebP uploads through drag-and-drop or a file picker. Images are verified, with a 5 MB file limit and a 25-million-pixel limit. The public navbar and menu use uploaded files, falling back to existing image URLs where present.
+Restaurant logos and menu photos accept JPG, PNG, and WebP uploads through drag-and-drop or a file picker. Original uploads are verified with a 5 MB safety cap and a 25-million-pixel limit, then optimized server-side before storage. The saved delivery file targets 150 KB or less for faster menu loading. The public navbar and menu use uploaded files, falling back to existing image URLs where present.
 
-Local files go to `media/restaurants/<immutable-restaurant-uuid>/branding/` or `menu/`. Each file receives a random name, so restaurant slug changes and duplicate filenames do not overwrite images. A remove-image action clears the reference on Save; old objects are retained and should eventually be cleaned by an unreferenced-object retention job.
+Local files, and R2 objects when R2 is enabled, go under `carryout/<account-slug>/<restaurant-slug>/logo/` or `carryout/<account-slug>/<restaurant-slug>/menu-items/`. Each file receives a random suffix, so duplicate filenames do not overwrite images. A remove-image action clears the reference on Save; old objects are retained and should eventually be cleaned by an unreferenced-object retention job.
 
 To use Cloudflare R2, export these environment variables before starting Django (a `.env` file is not loaded automatically):
 

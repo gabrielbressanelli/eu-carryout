@@ -20,13 +20,13 @@ class LandingPageTests(TestCase):
     def test_landing_page_is_public_and_has_signup_tour(self):
         response = self.client.get(reverse("landing"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Your restaurant’s ordering system")
+        self.assertContains(response, "Your restaurant's online ordering storefront")
         self.assertContains(response, "data-tour")
         self.assertContains(response, "signup-placeholder")
         self.assertContains(response, "/onboarding/login/")
         self.assertContains(response, "Log in")
         self.assertContains(response, "Half portion")
-        self.assertContains(response, "Make.com")
+        self.assertContains(response, "Your Systems")
         self.assertContains(response, "HostHub")
         self.assertContains(response, "Voice AI agent")
 

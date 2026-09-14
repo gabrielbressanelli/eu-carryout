@@ -55,7 +55,7 @@
       error.textContent = "";
       if (!file) return;
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
-        error.textContent = "Choose a JPG, PNG, or WebP image smaller than 5 MB.";
+        error.textContent = "Choose a JPG, PNG, or WebP image smaller than 5 MB. Carryout will optimize it for fast loading.";
         input.value = "";
         preview.hidden = !original || removed;
         if (original && !removed) preview.src = original;

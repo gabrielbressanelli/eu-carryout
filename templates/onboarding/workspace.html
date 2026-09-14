@@ -2,13 +2,13 @@
 {% block title %}{{ tenant.name }} | Settings{% endblock %}
 {% block content %}
 <header class="onboarding-header">
-  <div><p class="section-kicker">Location settings</p><h1>{{ tenant.name }}</h1></div>
+  <div><p class="section-kicker">{{ tenant.account.name }} location settings</p><h1>{{ tenant.name }}</h1></div>
   <a class="btn btn-outline-dark" href="/{{ tenant.slug }}/" target="_blank" rel="noopener"><i data-lucide="external-link"></i> Ordering site</a>
 </header>
 <div class="onboarding-layout">
   <aside class="setup-nav" aria-label="Location settings">
     {% for key, label in sections %}<a href="{% url 'onboarding:restaurant_manage' tenant.slug %}?section={{ key }}" {% if section == key %}class="is-current" aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
-    {% if user.is_superuser %}<a href="{% url 'onboarding:restaurant_manage' tenant.slug %}?section=access" {% if section == 'access' %}class="is-current" aria-current="page"{% endif %}>Login access</a>{% endif %}
+    {% if can_manage_access %}<a href="{% url 'onboarding:restaurant_manage' tenant.slug %}?section=access" {% if section == 'access' %}class="is-current" aria-current="page"{% endif %}>Login access</a>{% endif %}
   </aside>
   <div class="setup-content">{% block workspace %}{% endblock %}</div>
 </div>

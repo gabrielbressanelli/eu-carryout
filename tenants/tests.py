@@ -11,8 +11,9 @@ from django.urls import reverse
 
 from catalog.models import MenuCategory, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
 from ordering.models import Order, OrderItem
-from .models import BusinessHour, Tenant, TenantIntegration, TenantMembership
+from .models import Account, AccountMembership, BusinessHour, Tenant, TenantIntegration, TenantMembership
 from .services import ensure_tenant_onboarding_defaults
+from .uploads import TARGET_IMAGE_BYTES
 
 
 @override_settings(STORAGES={
@@ -52,6 +53,13 @@ class OnboardingFlowTests(TestCase):
         stream = BytesIO()
         Image.new("RGB", (120, 80), "#277653").save(stream, format="JPEG")
         return SimpleUploadedFile(name, stream.getvalue(), content_type="image/jpeg")
+
+    def large_image_upload(self, name="large-photo.jpg"):
+        stream = BytesIO()
+        Image.effect_noise((1400, 1000), 90).convert("RGB").save(stream, format="JPEG", quality=95)
+        content = stream.getvalue()
+        self.assertGreater(len(content), TARGET_IMAGE_BYTES)
+        return SimpleUploadedFile(name, content, content_type="image/jpeg")
 
     def business_data(self, **extra):
         return {
@@ -102,9 +110,55 @@ class OnboardingFlowTests(TestCase):
         membership.delete()
         self.assertEqual(self.client.get(self.manage_url(self.other)).status_code, 404)
 
+    def test_account_admin_sees_account_restaurants_and_manages_location_access(self):
+        account = Account.objects.create(name="Restaurant Group", slug="restaurant-group")
+        first = Tenant.objects.create(account=account, name="Group One", slug="group-one")
+        second = Tenant.objects.create(account=account, name="Group Two", slug="group-two")
+        account_admin = get_user_model().objects.create_user("group-admin", password="StrongPassphrase!873")
+        location_user = get_user_model().objects.create_user("group-one-user", password="StrongPassphrase!873")
+        AccountMembership.objects.create(user=account_admin, account=account)
+        TenantMembership.objects.create(user=location_user, tenant=first)
+
+        self.client.force_login(account_admin)
+        response = self.client.get(reverse("onboarding:restaurant_list"))
+        self.assertContains(response, "Restaurant Group")
+        self.assertContains(response, first.name)
+        self.assertContains(response, second.name)
+        self.assertContains(response, "Add restaurant")
+        self.assertEqual(self.client.get(self.manage_url(first) + "?section=access").status_code, 200)
+
+        self.client.force_login(location_user)
+        response = self.client.get(reverse("onboarding:restaurant_list"))
+        self.assertContains(response, first.name)
+        self.assertNotContains(response, second.name)
+        self.assertNotContains(response, "Add restaurant")
+        self.assertEqual(self.client.get(self.manage_url(second)).status_code, 404)
+        self.assertEqual(self.client.get(self.manage_url(first) + "?section=access").status_code, 403)
+
+    def test_account_admin_can_create_restaurant_under_their_account(self):
+        account = Account.objects.create(name="Restaurant Group", slug="restaurant-group")
+        account_admin = get_user_model().objects.create_user("group-admin", password="StrongPassphrase!873")
+        AccountMembership.objects.create(user=account_admin, account=account)
+        self.client.force_login(account_admin)
+        data = self.business_data(**{
+            "account-account": account.pk,
+            "tenant-name": "Group Three",
+            "tenant-slug": "group-three",
+            "owner-username": "group-three-owner",
+            "owner-email": "three@example.test",
+            "owner-password": "NewStrongPassphrase!873",
+            "owner-password_confirm": "NewStrongPassphrase!873",
+        })
+        response = self.client.post(reverse("onboarding:restaurant_create"), data)
+        self.assertEqual(response.status_code, 302)
+        tenant = Tenant.objects.get(slug="group-three")
+        self.assertEqual(tenant.account, account)
+        self.assertTrue(tenant.memberships.filter(user__username="group-three-owner").exists())
+
     def test_create_restaurant_with_login_and_defaults(self):
         self.client.force_login(self.admin)
         data = self.business_data(**{
+            "account-account_name": "Third Group", "account-account_slug": "third-group",
             "tenant-name": "Third Location", "tenant-slug": "third-location",
             "owner-username": "new-owner", "owner-email": "new@example.test",
             "owner-password": "NewStrongPassphrase!873", "owner-password_confirm": "NewStrongPassphrase!873",
@@ -117,9 +171,12 @@ class OnboardingFlowTests(TestCase):
         self.assertTrue(account.check_password("NewStrongPassphrase!873"))
         self.assertFalse(account.is_staff)
         self.assertTrue(tenant.memberships.filter(user=account).exists())
+        self.assertEqual(tenant.account.slug, "third-group")
+        self.assertTrue(tenant.account.memberships.filter(user=account).exists())
         self.assertEqual(tenant.business_hours.count(), 7)
         self.assertEqual(tenant.integrations.count(), 3)
-        self.assertTrue(tenant.logo.name.startswith(f"restaurants/{tenant.media_key}/branding/"))
+        self.assertTrue(tenant.logo.name.startswith("carryout/third-group/third-location/logo/"))
+        self.assertLessEqual(tenant.logo.size, TARGET_IMAGE_BYTES)
 
     def test_existing_account_can_be_granted_another_location_without_password_reset(self):
         self.client.force_login(self.admin)
@@ -222,18 +279,20 @@ class OnboardingFlowTests(TestCase):
         self.assertEqual(self.client.post(self.manage_url(), data).status_code, 403)
 
     def test_uploads_use_location_folders_and_render_publicly(self):
-        response = self.client.post(self.manage_url(), self.business_data(**{"tenant-logo": self.image_upload()}))
+        response = self.client.post(self.manage_url(), self.business_data(**{"tenant-logo": self.large_image_upload()}))
         self.assertEqual(response.status_code, 302)
         self.tenant.refresh_from_db()
         logo_path = self.tenant.logo.name
-        self.assertTrue(logo_path.startswith(f"restaurants/{self.tenant.media_key}/branding/"))
+        self.assertTrue(logo_path.startswith("carryout/blue-plate/blue-plate/logo/"))
+        self.assertLessEqual(self.tenant.logo.size, TARGET_IMAGE_BYTES)
         response = self.client.post(self.editor_url("item", self.item), {
             "category": self.category.pk, "name": self.item.name, "price": "18.00", "sort_order": 0,
-            "is_active": "on", "image": self.image_upload(),
+            "is_active": "on", "image": self.large_image_upload(),
         })
         self.assertEqual(response.status_code, 302)
         self.item.refresh_from_db()
-        self.assertTrue(self.item.image.name.startswith(f"restaurants/{self.tenant.media_key}/menu/"))
+        self.assertTrue(self.item.image.name.startswith("carryout/blue-plate/blue-plate/menu-items/grilled-chicken-"))
+        self.assertLessEqual(self.item.image.size, TARGET_IMAGE_BYTES)
         response = self.client.get(f"/{self.tenant.slug}/")
         self.assertContains(response, self.tenant.logo.url)
         self.assertContains(response, self.item.image.url)

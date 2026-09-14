@@ -12,11 +12,11 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from catalog.models import MenuCategory, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
 
-from .access import accessible_tenants, restaurant_access
+from .access import accessible_tenants, can_create_restaurants, can_manage_tenant_access, restaurant_access
 from .forms import (
     BusinessHourFormSet, MenuCategoryForm, MenuItemForm, MenuItemModifierGroupForm,
     ModifierGroupForm, ModifierOptionEditorForm, RestaurantAccessForm,
-    RestaurantLoginForm, TenantIntegrationFormSet, TenantOnboardingForm,
+    RestaurantAccountForm, RestaurantLoginForm, TenantIntegrationFormSet, TenantOnboardingForm,
     OrderingSettingsForm, HoursOverrideForm,
 )
 from .models import BusinessHour, Tenant, TenantIntegration, HoursOverride
@@ -64,25 +64,45 @@ def restaurant_logout(request):
 
 @login_required(login_url="onboarding:login")
 def restaurant_list(request):
-    tenants = accessible_tenants(request.user).order_by("name").prefetch_related("menu_items", "integrations")
-    return render(request, "onboarding/index.html", {"tenants": tenants})
+    tenants = list(
+        accessible_tenants(request.user)
+        .select_related("account")
+        .order_by("account__name", "name")
+        .prefetch_related("menu_items", "integrations")
+    )
+    account_groups = []
+    for tenant in tenants:
+        if not account_groups or account_groups[-1]["account"] != tenant.account:
+            account_groups.append({"account": tenant.account, "tenants": []})
+        account_groups[-1]["tenants"].append(tenant)
+    return render(
+        request,
+        "onboarding/index.html",
+        {"tenants": tenants, "account_groups": account_groups, "can_create_restaurants": can_create_restaurants(request.user)},
+    )
 
 
 @login_required(login_url="onboarding:login")
 def restaurant_create(request):
-    if not request.user.is_superuser:
+    if not can_create_restaurants(request.user):
         raise PermissionDenied
     form = TenantOnboardingForm(request.POST or None, request.FILES or None, prefix="tenant", initial={"timezone": "America/Detroit", "is_active": True})
+    account_form = RestaurantAccountForm(request.POST or None, prefix="account", user=request.user)
     access_form = RestaurantAccessForm(request.POST or None, prefix="owner")
     if request.method == "POST":
         valid = form.is_valid()
+        valid = account_form.is_valid() and valid
         valid = access_form.is_valid() and valid
         if valid:
             try:
                 with transaction.atomic():
-                    tenant = form.save()
+                    account = account_form.save()
+                    tenant = form.save(commit=False)
+                    tenant.account = account
+                    tenant.save()
                     ensure_tenant_onboarding_defaults(tenant)
-                    access_form.save(tenant)
+                    owner = access_form.save(tenant)
+                    account_form.grant_owner_if_created(owner, account)
             except IntegrityError:
                 form.add_error(None, "This restaurant or login already exists. Check the details and try again.")
             except (BotoCoreError, ClientError, OSError):
@@ -90,7 +110,7 @@ def restaurant_create(request):
             else:
                 messages.success(request, "Restaurant and login access created.")
                 return redirect(_manage_url(tenant))
-    return render(request, "onboarding/create.html", {"form": form, "access_form": access_form})
+    return render(request, "onboarding/create.html", {"form": form, "account_form": account_form, "access_form": access_form})
 
 
 def _validate_formset_identity(data, queryset, prefix):
@@ -109,9 +129,11 @@ def restaurant_manage(request, tenant):
     section = request.GET.get("section", "overview")
     if section not in dict(SECTIONS) and section != "access":
         return redirect(_manage_url(tenant))
-    if section == "access" and not request.user.is_superuser:
+    can_manage_access = can_manage_tenant_access(request.user, tenant)
+    if section == "access" and not can_manage_access:
         raise PermissionDenied
     context = _context(tenant, section)
+    context["can_manage_access"] = can_manage_access
     action = request.POST.get("action")
     if request.method == "POST" and action not in {"business", "hours", "services", "access", "revoke_access", "ordering"}:
         raise PermissionDenied
@@ -157,7 +179,7 @@ def restaurant_manage(request, tenant):
                 messages.success(request, f"{key.capitalize()} saved.")
                 return redirect(_manage_url(tenant, key))
     if request.method == "POST" and action in {"access", "revoke_access"}:
-        if not request.user.is_superuser:
+        if not can_manage_access:
             raise PermissionDenied
         context["section"] = "access"
         if action == "revoke_access":
@@ -183,7 +205,7 @@ def restaurant_manage(request, tenant):
         modifier_groups=ModifierGroup.objects.filter(tenant=tenant).prefetch_related("options", "menuitemmodifiergroup_set"),
         options=ModifierOption.objects.filter(group__tenant=tenant).select_related("group"),
         item_links=MenuItemModifierGroup.objects.filter(menu_item__tenant=tenant, group__tenant=tenant).select_related("menu_item", "group"),
-        memberships=tenant.memberships.select_related("user") if request.user.is_superuser else [],
+        memberships=tenant.memberships.select_related("user") if can_manage_access else [],
     )
     return render(request, "onboarding/manage.html", context)
 
