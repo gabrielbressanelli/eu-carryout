@@ -390,6 +390,12 @@ body {
   line-height: 1.55;
 }
 
+.success-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .success-contact {
   margin: 1rem 0 0;
 }

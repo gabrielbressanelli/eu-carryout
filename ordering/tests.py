@@ -236,7 +236,8 @@ class CustomerOrderingTests(TestCase):
         self.assertEqual(order.status, Order.STATUS_PAID)
         self.assertEqual(order.customer_email, "guest@example.test")
         self.assertContains(response, "160 Main St")
-        self.assertContains(response, "Open in Maps")
+        self.assertContains(response, "Open in Apple Maps")
+        self.assertContains(response, "Open in Google Maps")
 
     @override_settings(STRIPE_SECRET_KEY="test-key")
     def test_checkout_success_still_shows_pickup_details_when_confirmation_is_pending(self):

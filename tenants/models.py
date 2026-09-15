@@ -93,6 +93,10 @@ class Tenant(models.Model):
     def maps_url(self):
         return f"https://www.google.com/maps/search/?api=1&query={quote_plus(self.full_address)}" if self.full_address else ""
 
+    @property
+    def apple_maps_url(self):
+        return f"https://maps.apple.com/?address={quote_plus(self.full_address)}" if self.full_address else ""
+
 
 class TenantMembership(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="restaurant_memberships")

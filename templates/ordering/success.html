@@ -45,7 +45,10 @@
             <h2>{{ tenant.name }}</h2>
             {% if tenant.address_lines %}
               <address>{% for line in tenant.address_lines %}{{ line }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</address>
-              <a class="btn btn-outline-dark btn-sm" href="{{ tenant.maps_url }}" target="_blank" rel="noopener">Open in Maps</a>
+              <div class="success-map-actions">
+                <a class="btn btn-outline-dark btn-sm" href="{{ tenant.apple_maps_url }}" target="_blank" rel="noopener">Open in Apple Maps</a>
+                <a class="btn btn-outline-dark btn-sm" href="{{ tenant.maps_url }}" target="_blank" rel="noopener">Open in Google Maps</a>
+              </div>
             {% else %}
               <p class="text-muted">Pickup address will be provided by the restaurant.</p>
             {% endif %}
