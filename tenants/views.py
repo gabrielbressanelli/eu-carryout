@@ -18,7 +18,7 @@ from .access import accessible_tenants, can_create_restaurants, can_manage_tenan
 from .forms import (
     BusinessHourFormSet, MenuCategoryForm, MenuItemForm, MenuItemModifierGroupForm,
     ModifierGroupForm, ModifierOptionEditorForm, RestaurantAccessForm,
-    RestaurantAccountForm, RestaurantLoginForm, TenantIntegrationFormSet, TenantOnboardingForm,
+    RestaurantAccountForm, RestaurantCreateAccessForm, RestaurantLoginForm, TenantIntegrationFormSet, TenantOnboardingForm,
     OrderingSettingsForm, HoursOverrideForm,
 )
 from .models import BusinessHour, Tenant, TenantIntegration, HoursOverride
@@ -92,10 +92,13 @@ def restaurant_create(request):
         raise PermissionDenied
     form = TenantOnboardingForm(request.POST or None, request.FILES or None, prefix="tenant", initial={"timezone": "America/Detroit", "is_active": True})
     account_form = RestaurantAccountForm(request.POST or None, prefix="account", user=request.user)
-    access_form = RestaurantAccessForm(request.POST or None, prefix="owner")
+    login_required = not account_form.fields["account"].queryset.exists()
     if request.method == "POST":
         valid = form.is_valid()
         valid = account_form.is_valid() and valid
+        login_required = not bool(account_form.cleaned_data.get("account")) if account_form.is_valid() else True
+    access_form = RestaurantCreateAccessForm(request.POST or None, prefix="owner", login_required=login_required)
+    if request.method == "POST":
         valid = access_form.is_valid() and valid
         if valid:
             try:
@@ -113,7 +116,7 @@ def restaurant_create(request):
                 log.exception("Restaurant logo upload failed while creating a restaurant.")
                 form.add_error("logo", "The image could not be uploaded. Please choose the file and try again.")
             else:
-                messages.success(request, "Restaurant and login access created.")
+                messages.success(request, "Restaurant created.")
                 return redirect(_manage_url(tenant))
     return render(request, "onboarding/create.html", {"form": form, "account_form": account_form, "access_form": access_form})
 

@@ -73,6 +73,41 @@ class RestaurantAccessForm(forms.Form):
         return self.account
 
 
+class RestaurantCreateAccessForm(RestaurantAccessForm):
+    add_login = forms.BooleanField(required=False, label="Add a location-specific login")
+
+    def __init__(self, *args, login_required=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.login_required = login_required
+        self.account = None
+        if login_required:
+            self.fields.pop("add_login")
+        else:
+            add_login = self.fields.pop("add_login")
+            self.fields = {"add_login": add_login, **self.fields}
+            self.fields["username"].required = False
+            self.fields["username"].help_text = "Leave blank when the account's admins should manage this location."
+
+    def clean(self):
+        if self.login_required:
+            return super().clean()
+        cleaned = forms.Form.clean(self)
+        login_values = [cleaned.get(name) for name in ("username", "email", "password", "password_confirm")]
+        wants_login = cleaned.get("add_login") or any(login_values)
+        if not wants_login:
+            self.account = None
+            return cleaned
+        if not cleaned.get("username"):
+            self.add_error("username", "Enter a username for the location-specific login.")
+            return cleaned
+        return RestaurantAccessForm.clean(self)
+
+    def save(self, tenant):
+        if self.account is None:
+            return None
+        return super().save(tenant)
+
+
 class RestaurantAccountForm(forms.Form):
     account = forms.ModelChoiceField(required=False, queryset=Account.objects.none(), label="Account", widget=forms.Select(attrs={"class": "form-select"}))
     account_name = forms.CharField(required=False, max_length=120, label="New account name", widget=forms.TextInput(attrs={"class": "form-control"}))

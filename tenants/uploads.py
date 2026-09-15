@@ -10,6 +10,7 @@ from PIL import Image, ImageOps
 TARGET_IMAGE_BYTES = 150 * 1024
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_IMAGE_PIXELS = 25_000_000
+ALLOWED_IMAGE_FORMATS = {"JPEG", "MPO", "PNG", "WEBP"}
 QUALITY_STEPS = (85, 80, 75, 70, 65, 60, 55, 50, 45, 40)
 SCALE_STEPS = (1.0, 0.85, 0.7, 0.55, 0.42, 0.32, 0.24, 0.18, 0.14)
 MAX_EDGES = {"logo": 800, "menu_item": 1200}
@@ -116,7 +117,7 @@ class RestaurantImageField(forms.ImageField):
             raise forms.ValidationError("Choose an image smaller than 5 MB.")
         image = super().to_python(data)
         if image:
-            if image.image.format not in {"JPEG", "PNG", "WEBP"}:
+            if image.image.format not in ALLOWED_IMAGE_FORMATS:
                 raise forms.ValidationError("Choose a JPG, PNG, or WebP image.")
             if image.image.width * image.image.height > MAX_IMAGE_PIXELS:
                 raise forms.ValidationError("Choose an image with fewer than 25 million pixels.")

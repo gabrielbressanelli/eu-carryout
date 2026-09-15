@@ -61,6 +61,12 @@ class OnboardingFlowTests(TestCase):
         self.assertGreater(len(content), TARGET_IMAGE_BYTES)
         return SimpleUploadedFile(name, content, content_type="image/jpeg")
 
+    def mpo_jpeg_upload(self, name="phone-photo.jpg"):
+        stream = BytesIO()
+        image = Image.new("RGB", (120, 80), "#277653")
+        image.save(stream, format="MPO", save_all=True, append_images=[Image.new("RGB", (120, 80), "#123456")])
+        return SimpleUploadedFile(name, stream.getvalue(), content_type="image/jpeg")
+
     def business_data(self, **extra):
         return {
             "action": "business", "tenant-name": self.tenant.name, "tenant-slug": self.tenant.slug,
@@ -154,6 +160,23 @@ class OnboardingFlowTests(TestCase):
         tenant = Tenant.objects.get(slug="group-three")
         self.assertEqual(tenant.account, account)
         self.assertTrue(tenant.memberships.filter(user__username="group-three-owner").exists())
+
+    def test_account_admin_can_create_restaurant_without_extra_location_login(self):
+        account = Account.objects.create(name="Restaurant Group", slug="restaurant-group")
+        account_admin = get_user_model().objects.create_user("group-admin", password="StrongPassphrase!873")
+        AccountMembership.objects.create(user=account_admin, account=account)
+        self.client.force_login(account_admin)
+        data = self.business_data(**{
+            "account-account": account.pk,
+            "tenant-name": "Group Three",
+            "tenant-slug": "group-three",
+        })
+        response = self.client.post(reverse("onboarding:restaurant_create"), data)
+        self.assertEqual(response.status_code, 302)
+        tenant = Tenant.objects.get(slug="group-three")
+        self.assertEqual(tenant.account, account)
+        self.assertFalse(tenant.memberships.exists())
+        self.assertEqual(self.client.get(self.manage_url(tenant)).status_code, 200)
 
     def test_create_restaurant_with_login_and_defaults(self):
         self.client.force_login(self.admin)
@@ -300,6 +323,15 @@ class OnboardingFlowTests(TestCase):
         self.tenant.save()
         self.assertEqual(self.tenant.logo.name, logo_path)
         self.assertNotEqual(self.tenant.media_key, self.other.media_key)
+
+    def test_jpeg_family_menu_uploads_are_accepted(self):
+        response = self.client.post(self.editor_url("item", self.item), {
+            "category": self.category.pk, "name": self.item.name, "price": "18.00", "sort_order": 0,
+            "is_active": "on", "image": self.mpo_jpeg_upload(),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertTrue(self.item.image.name.endswith(".webp"))
 
     def test_upload_rejects_fake_and_oversized_files(self):
         for upload in [

@@ -41,6 +41,10 @@ body {
 }
 
 .nav-main-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(0, auto) minmax(90px, 1fr);
+  align-items: center;
+  gap: 24px;
   min-height: 88px;
 }
 
@@ -48,12 +52,34 @@ body {
   font-size: 1.45rem;
   font-weight: 700;
   min-width: 0;
+  justify-self: start;
 }
 
 .brand-logo {
   width: 190px;
   height: 60px;
   object-fit: contain;
+}
+
+.desktop-cats {
+  justify-self: center;
+  max-width: min(54vw, 680px);
+  gap: 28px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.desktop-cats::-webkit-scrollbar {
+  display: none;
+}
+
+.desktop-cats .nav-link {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.nav-actions {
+  justify-self: end;
 }
 
 .nav-link {

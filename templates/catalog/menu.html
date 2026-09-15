@@ -17,10 +17,12 @@
             <span>{{ tenant.name }}</span>
           {% endif %}
         </a>
-        <div class="d-flex align-items-center gap-2">
+        <div class="desktop-cats d-none d-lg-flex" aria-label="Menu categories">
           {% for category in categories %}
-            <a class="nav-link d-none d-lg-inline" href="#{{ category.slug }}">{{ category.name }}</a>
+            <a class="nav-link" href="#{{ category.slug }}">{{ category.name }}</a>
           {% endfor %}
+        </div>
+        <div class="nav-actions d-flex align-items-center gap-2">
           <button class="btn btn-outline-dark cart-button" type="button" data-bs-toggle="offcanvas" data-bs-target="#cartOffcanvas" aria-controls="cartOffcanvas">
             Cart
             <span class="badge bg-dark text-white ms-1 rounded-pill {% if cart|length == 0 %}d-none{% endif %}" data-cart-count>{{ cart|length }}</span>
