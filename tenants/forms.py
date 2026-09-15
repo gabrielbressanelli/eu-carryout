@@ -20,6 +20,13 @@ def _timezone_choices():
         zone for zone in available_timezones()
         if "/" in zone and not zone.startswith(("Etc/", "posix/", "right/"))
     )
+    if not zones:
+        zones = [
+            "America/Anchorage", "America/Chicago", "America/Denver", "America/Detroit",
+            "America/Los_Angeles", "America/New_York", "America/Phoenix", "America/Toronto",
+            "America/Vancouver", "Asia/Tokyo", "Australia/Sydney", "Europe/Berlin",
+            "Europe/London", "Pacific/Auckland",
+        ]
     return [(zone, zone.replace("_", " ")) for zone in zones]
 
 
@@ -188,7 +195,9 @@ class TenantOnboardingForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["timezone"].choices = _timezone_choices()
+        timezone_choices = _timezone_choices()
+        self.fields["timezone"].choices = timezone_choices
+        self.fields["timezone"].widget.choices = timezone_choices
         self.fields["timezone"].help_text = "Used for business hours, pickup times, and order confirmations."
 
     def save(self, commit=True):
