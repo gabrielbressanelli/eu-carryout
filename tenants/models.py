@@ -13,6 +13,8 @@ class Account(models.Model):
     stripe_account_id = models.CharField(max_length=255, blank=True, default="")
     stripe_charges_enabled = models.BooleanField(default=False)
     stripe_onboarding_complete = models.BooleanField(default=False)
+    stripe_application_fee_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    stripe_application_fee_fixed_cents = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -12,7 +12,7 @@ class AccountMembershipInline(admin.TabularInline):
 
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "stripe_account_id", "stripe_charges_enabled", "stripe_onboarding_complete", "restaurant_count", "created_at")
+    list_display = ("name", "slug", "stripe_account_id", "stripe_application_fee_percent", "stripe_application_fee_fixed_cents", "stripe_charges_enabled", "stripe_onboarding_complete", "restaurant_count", "created_at")
     list_filter = ("stripe_charges_enabled", "stripe_onboarding_complete")
     search_fields = ("name", "slug", "stripe_account_id")
     prepopulated_fields = {"slug": ("name",)}

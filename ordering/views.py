@@ -23,9 +23,17 @@ from .services import create_order_from_cart, mark_stripe_order_paid
 log = logging.getLogger(__name__)
 
 
-def _platform_fee_amount_cents(total):
-    percent = Decimal(str(getattr(settings, "STRIPE_APPLICATION_FEE_PERCENT", "0") or "0"))
-    fixed_cents = int(getattr(settings, "STRIPE_APPLICATION_FEE_FIXED_CENTS", "0") or 0)
+def _platform_fee_amount_cents(total, account):
+    percent = (
+        account.stripe_application_fee_percent
+        if account.stripe_application_fee_percent is not None
+        else Decimal(str(getattr(settings, "STRIPE_APPLICATION_FEE_PERCENT", "0") or "0"))
+    )
+    fixed_cents = (
+        account.stripe_application_fee_fixed_cents
+        if account.stripe_application_fee_fixed_cents is not None
+        else int(getattr(settings, "STRIPE_APPLICATION_FEE_FIXED_CENTS", "0") or 0)
+    )
     total_cents = int((total * 100).quantize(Decimal("1")))
     fee_cents = fixed_cents + int((Decimal(total_cents) * percent / Decimal("100")).quantize(Decimal("1")))
     return fee_cents if 0 < fee_cents < total_cents else 0
@@ -265,7 +273,7 @@ def create_checkout_session(request, tenant_slug):
         "stripe_account_id": stripe_account_id,
     }
     payment_intent_data = {}
-    application_fee_amount = _platform_fee_amount_cents(cart.total())
+    application_fee_amount = _platform_fee_amount_cents(cart.total(), cart.tenant.account)
     if application_fee_amount:
         payment_intent_data["application_fee_amount"] = application_fee_amount
 

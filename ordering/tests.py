@@ -175,6 +175,25 @@ class CustomerOrderingTests(TestCase):
         self.assertIn("restaurant", response.json()["error"])
         self.assertFalse(Order.objects.exists())
 
+    @override_settings(STRIPE_SECRET_KEY="test-key", STRIPE_APPLICATION_FEE_PERCENT="10", STRIPE_APPLICATION_FEE_FIXED_CENTS="30")
+    def test_account_fee_override_can_disable_global_fee(self):
+        self.add()
+        self.tenant.account.stripe_application_fee_percent = Decimal("0")
+        self.tenant.account.stripe_application_fee_fixed_cents = 0
+        self.tenant.account.save()
+        session = SimpleNamespace(id="cs_test_no_fee", url="https://checkout.stripe.test/session")
+        created = {}
+
+        def create_session(**kwargs):
+            created.update(kwargs)
+            return session
+
+        stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=SimpleNamespace(create=create_session)))
+        with patch.dict("sys.modules", {"stripe": stripe}), patch("tenants.hours.timezone.now", return_value=datetime(2026, 9, 10, 16, tzinfo=dt_timezone.utc)):
+            response = self.checkout()
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("payment_intent_data", created)
+
     def test_closed_or_paused_store_cannot_start_payment(self):
         self.add()
         with patch("tenants.hours.timezone.now", return_value=datetime(2026, 9, 10, 5, tzinfo=dt_timezone.utc)):
