@@ -225,7 +225,10 @@ class CustomerOrderingTests(TestCase):
         def retrieve_session(session_id, **kwargs):
             retrieved["session_id"] = session_id
             retrieved.update(kwargs)
-            return session
+            class StripeSession:
+                def to_dict_recursive(self):
+                    return session
+            return StripeSession()
 
         stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=SimpleNamespace(retrieve=retrieve_session)))
         with patch.dict("sys.modules", {"stripe": stripe}):

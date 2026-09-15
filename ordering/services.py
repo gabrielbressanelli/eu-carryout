@@ -10,6 +10,19 @@ from tenants.services import run_post_payment_workflow
 from .models import Order, OrderItem
 
 
+def stripe_payload(value):
+    """Convert stripe-python resource objects to the mapping used by our services."""
+    if isinstance(value, dict):
+        return value
+    converter = getattr(value, "to_dict_recursive", None)
+    if callable(converter):
+        return converter()
+    converter = getattr(value, "to_dict", None)
+    if callable(converter):
+        return converter()
+    return dict(value)
+
+
 def create_order_from_cart(cart, stripe_session_id="", customer=None, status=Order.STATUS_DRAFT, pickup_at=None):
     customer = customer or {}
     _, changes, errors = cart.review()
@@ -53,6 +66,7 @@ def create_order_from_cart(cart, stripe_session_id="", customer=None, status=Ord
 
 
 def mark_stripe_order_paid(session):
+    session = stripe_payload(session)
     metadata = session.get("metadata") or {}
     tenant_id = metadata.get("tenant_id")
     if not tenant_id:

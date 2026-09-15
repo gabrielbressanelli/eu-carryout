@@ -18,7 +18,7 @@ from tenants.hours import OrderingHours
 
 from .cart import Cart
 from .models import Order
-from .services import create_order_from_cart, mark_stripe_order_paid
+from .services import create_order_from_cart, mark_stripe_order_paid, stripe_payload
 
 log = logging.getLogger(__name__)
 
@@ -367,6 +367,7 @@ def stripe_webhook(request):
         log.warning("Stripe webhook signature validation failed.")
         return HttpResponse(status=400)
 
+    event = stripe_payload(event)
     if event.get("type") in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         session = event["data"]["object"]
         if session.get("payment_status") == "paid":
