@@ -35,6 +35,10 @@ class CustomerOrderingTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.tenant = Tenant.objects.create(name="Kitchen", slug="kitchen", preparation_minutes=20)
+        cls.tenant.account.stripe_account_id = "acct_kitchen"
+        cls.tenant.account.stripe_charges_enabled = True
+        cls.tenant.account.stripe_onboarding_complete = True
+        cls.tenant.account.save()
         cls.category = MenuCategory.objects.create(tenant=cls.tenant, name="Mains", slug="mains")
         cls.item = MenuItem.objects.create(tenant=cls.tenant, category=cls.category, name="Pasta", price=Decimal("20.00"))
         cls.portion = ModifierGroup.objects.create(tenant=cls.tenant, name="Portion", required=True)
@@ -136,21 +140,40 @@ class CustomerOrderingTests(TestCase):
         client = Client(enforce_csrf_checks=True)
         self.assertEqual(client.post("/kitchen/checkout/create-session/").status_code, 403)
 
-    @override_settings(STRIPE_SECRET_KEY="test-key")
+    @override_settings(STRIPE_SECRET_KEY="test-key", STRIPE_APPLICATION_FEE_PERCENT="10", STRIPE_APPLICATION_FEE_FIXED_CENTS="30")
     def test_checkout_snapshots_modifiers_note_and_pickup(self):
         self.add([self.half.pk, self.cheese.pk], quantity=2, note="No salt")
         session = SimpleNamespace(id="cs_test_order", url="https://checkout.stripe.test/session")
-        stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=SimpleNamespace(create=lambda **kwargs: session)))
+        created = {}
+
+        def create_session(**kwargs):
+            created.update(kwargs)
+            return session
+
+        stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=SimpleNamespace(create=create_session)))
         now = datetime(2026, 9, 10, 16, tzinfo=dt_timezone.utc)
         with patch.dict("sys.modules", {"stripe": stripe}), patch("tenants.hours.timezone.now", return_value=now):
             response = self.checkout()
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(created["stripe_account"], "acct_kitchen")
+        self.assertEqual(created["payment_intent_data"]["application_fee_amount"], 290)
+        self.assertEqual(created["metadata"]["stripe_account_id"], "acct_kitchen")
         order = Order.objects.get()
         self.assertEqual(order.amount_paid, Decimal("26.00"))
         self.assertEqual(order.pickup_at, datetime(2026, 9, 10, 16, 20, tzinfo=dt_timezone.utc))
         self.assertEqual({option["name"] for option in order.items.get().options_snapshot}, {"Half portion", "Cheese"})
         self.assertIn("No salt", order.order_summary)
         self.assertEqual(build_order_event_payload(order)["items"][0]["note"], "No salt")
+
+    @override_settings(STRIPE_SECRET_KEY="test-key")
+    def test_checkout_requires_connected_stripe_account(self):
+        self.add()
+        self.tenant.account.stripe_account_id = ""
+        self.tenant.account.save()
+        response = self.checkout()
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("restaurant", response.json()["error"])
+        self.assertFalse(Order.objects.exists())
 
     def test_closed_or_paused_store_cannot_start_payment(self):
         self.add()

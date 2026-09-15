@@ -23,6 +23,14 @@ from .services import create_order_from_cart, mark_stripe_order_paid
 log = logging.getLogger(__name__)
 
 
+def _platform_fee_amount_cents(total):
+    percent = Decimal(str(getattr(settings, "STRIPE_APPLICATION_FEE_PERCENT", "0") or "0"))
+    fixed_cents = int(getattr(settings, "STRIPE_APPLICATION_FEE_FIXED_CENTS", "0") or 0)
+    total_cents = int((total * 100).quantize(Decimal("1")))
+    fee_cents = fixed_cents + int((Decimal(total_cents) * percent / Decimal("100")).quantize(Decimal("1")))
+    return fee_cents if 0 < fee_cents < total_cents else 0
+
+
 def landing(request):
     return render(request, "landing/index.html")
 
@@ -219,6 +227,9 @@ def create_checkout_session(request, tenant_slug):
     stripe_secret_key = getattr(settings, "STRIPE_SECRET_KEY", "")
     if not stripe_secret_key:
         return JsonResponse({"error": "Stripe is not configured."}, status=503)
+    stripe_account_id = cart.tenant.account.stripe_account_id
+    if not stripe_account_id:
+        return JsonResponse({"error": "Stripe is not configured for this restaurant."}, status=503)
 
     try:
         import stripe
@@ -251,22 +262,31 @@ def create_checkout_session(request, tenant_slug):
         "order_summary": order.order_summary[:500],
         "pickup_at": pickup_at.isoformat(),
         "pickup_timezone": cart.tenant.timezone,
+        "stripe_account_id": stripe_account_id,
     }
+    payment_intent_data = {}
+    application_fee_amount = _platform_fee_amount_cents(cart.total())
+    if application_fee_amount:
+        payment_intent_data["application_fee_amount"] = application_fee_amount
 
     try:
-        session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=line_items,
-            success_url=request.build_absolute_uri(
+        session_kwargs = {
+            "mode": "payment",
+            "line_items": line_items,
+            "success_url": request.build_absolute_uri(
                 reverse("checkout_success", kwargs={"tenant_slug": cart.tenant.slug})
             ) + "?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url=request.build_absolute_uri(
+            "cancel_url": request.build_absolute_uri(
                 reverse("checkout", kwargs={"tenant_slug": cart.tenant.slug})
             ),
-            customer_email=request.POST.get("email") or None,
-            phone_number_collection={"enabled": True},
-            metadata=metadata,
-        )
+            "customer_email": request.POST.get("email") or None,
+            "phone_number_collection": {"enabled": True},
+            "metadata": metadata,
+            "stripe_account": stripe_account_id,
+        }
+        if payment_intent_data:
+            session_kwargs["payment_intent_data"] = payment_intent_data
+        session = stripe.checkout.Session.create(**session_kwargs)
     except Exception:
         log.exception("Could not create Stripe Checkout Session.")
         return JsonResponse({"error": "Could not start payment."}, status=502)
@@ -294,7 +314,12 @@ def checkout_success(request, tenant_slug):
 
     stripe.api_key = stripe_secret_key
     try:
-        session = stripe.checkout.Session.retrieve(session_id, expand=["customer_details"])
+        tenant = _tenant_or_404(request, tenant_slug)
+        order = Order.objects.filter(stripe_session_id=session_id, tenant=tenant).select_related("tenant__account").first()
+        stripe_account_id = (order.tenant.account.stripe_account_id if order else tenant.account.stripe_account_id)
+        if not stripe_account_id:
+            return HttpResponse("Thanks. We are confirming your payment.", status=200)
+        session = stripe.checkout.Session.retrieve(session_id, expand=["customer_details"], stripe_account=stripe_account_id)
     except Exception:
         log.exception("Could not retrieve Stripe Checkout Session.")
         return HttpResponse("Thanks. We are confirming your payment.", status=200)

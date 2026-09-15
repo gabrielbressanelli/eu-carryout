@@ -7,7 +7,7 @@ Multi-tenant Django ordering service for restaurant carryout websites.
 - Slug-based access for restaurant-specific ordering sites, for example `/<restaurant-slug>/`.
 - Tenant-scoped menu categories, menu items, modifier groups, and modifier options.
 - Session carts isolated per tenant.
-- Stripe Checkout session creation with tenant and draft order metadata.
+- Stripe Checkout session creation through account-level Stripe Connect direct charges, with tenant and draft order metadata.
 - Paid orders tracked by tenant and customer email for future account linking.
 - Tenant integration toggles for kitchen printing, email notification, and SMS notification.
 - Post-payment workflow dispatches enabled integrations through configured HTTP endpoints.
@@ -41,7 +41,11 @@ Restaurant settings start at `/onboarding/`, with a simple login at `/onboarding
 ```bash
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+STRIPE_APPLICATION_FEE_PERCENT=0
+STRIPE_APPLICATION_FEE_FIXED_CENTS=0
 ```
+
+Stripe payments use Connect direct charges. Configure each restaurant group's connected account in Django Admin under `Accounts` by setting `stripe_account_id` to the connected account id, for example `acct_...`. Optional application fees are controlled by `STRIPE_APPLICATION_FEE_PERCENT` and `STRIPE_APPLICATION_FEE_FIXED_CENTS`.
 
 ## Tenant Integrations
 

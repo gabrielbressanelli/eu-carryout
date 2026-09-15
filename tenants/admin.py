@@ -12,8 +12,9 @@ class AccountMembershipInline(admin.TabularInline):
 
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "restaurant_count", "created_at")
-    search_fields = ("name", "slug")
+    list_display = ("name", "slug", "stripe_account_id", "stripe_charges_enabled", "stripe_onboarding_complete", "restaurant_count", "created_at")
+    list_filter = ("stripe_charges_enabled", "stripe_onboarding_complete")
+    search_fields = ("name", "slug", "stripe_account_id")
     prepopulated_fields = {"slug": ("name",)}
     inlines = [AccountMembershipInline]
 

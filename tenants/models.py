@@ -10,6 +10,9 @@ from .uploads import logo_upload_path
 class Account(models.Model):
     name = models.CharField(max_length=120)
     slug = models.SlugField(max_length=80, unique=True, blank=True)
+    stripe_account_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_charges_enabled = models.BooleanField(default=False)
+    stripe_onboarding_complete = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
