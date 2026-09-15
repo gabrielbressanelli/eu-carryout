@@ -163,13 +163,17 @@ STORAGES = {
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 if os.environ.get("R2_BUCKET_NAME"):
+    r2_jurisdiction = os.environ.get("R2_JURISDICTION", "").strip().lower()
+    r2_endpoint_account = os.environ["R2_ACCOUNT_ID"]
+    if r2_jurisdiction and r2_jurisdiction != "default":
+        r2_endpoint_account = f"{r2_endpoint_account}.{r2_jurisdiction}"
     STORAGES["default"] = {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {
             "bucket_name": os.environ["R2_BUCKET_NAME"],
             "access_key": os.environ["R2_ACCESS_KEY_ID"],
             "secret_key": os.environ["R2_SECRET_ACCESS_KEY"],
-            "endpoint_url": f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+            "endpoint_url": f"https://{r2_endpoint_account}.r2.cloudflarestorage.com",
             "region_name": "auto",
             "signature_version": "s3v4",
             "default_acl": None,
@@ -184,5 +188,4 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
 # R2 Bucket Images Conenction Variables
-
 
