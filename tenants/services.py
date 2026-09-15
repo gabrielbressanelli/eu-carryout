@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from datetime import time
 from urllib import error, request
 
@@ -10,6 +11,7 @@ from django.utils import timezone
 from .models import BusinessHour, IntegrationEvent, Tenant, TenantIntegration
 
 log = logging.getLogger(__name__)
+_TEMPLATE_VARIABLE = re.compile(r"{{\s*([A-Za-z_][\w.-]*)\s*}}")
 
 
 def get_tenant_by_slug(tenant_slug: str) -> Tenant:
@@ -45,14 +47,19 @@ def ensure_tenant_onboarding_defaults(tenant):
 
 def build_order_event_payload(order):
     tenant = order.tenant
+    order_ref = str(order.id)
     return {
         "event": "order.paid",
+        "type": "Website Carryout",
         "tenant_id": tenant.id,
         "tenant_slug": tenant.slug,
         "tenant_name": tenant.name,
         "order_id": order.id,
+        "order_ref": order_ref,
+        "orderNumber": order_ref,
         "stripe_session_id": order.stripe_session_id or "",
         "customer_name": order.customer_name,
+        "customerName": order.customer_name,
         "customer_email": order.customer_email,
         "customer_phone": order.customer_phone,
         "business_email": tenant.business_email,
@@ -65,6 +72,26 @@ def build_order_event_payload(order):
         "items": [{"name": item.name_snapshot, "quantity": item.quantity, "unit_price": str(item.unit_price),
                    "options": item.options_snapshot, "note": item.note} for item in order.items.all()],
     }
+
+
+def _template_value(value, payload):
+    if isinstance(value, dict):
+        return {key: _template_value(item, payload) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_template_value(item, payload) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    exact = _TEMPLATE_VARIABLE.fullmatch(value)
+    if exact:
+        return payload.get(exact.group(1), "")
+    return _TEMPLATE_VARIABLE.sub(lambda match: str(payload.get(match.group(1), "")), value)
+
+
+def build_integration_payload(order, integration):
+    payload = build_order_event_payload(order)
+    template = (integration.config or {}).get("request_body")
+    return _template_value(template, payload) if template else payload
 
 
 def _headers_for(integration):
@@ -82,7 +109,7 @@ def _post_json(url, payload, headers):
 
 
 def send_integration_event(order, integration):
-    payload = build_order_event_payload(order)
+    payload = build_integration_payload(order, integration)
     event, created = IntegrationEvent.objects.get_or_create(
         order=order,
         tenant=order.tenant,

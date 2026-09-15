@@ -51,7 +51,7 @@
       {{ form.id }}{{ form.kind }}
       <div class="section-heading"><h3>{{ form.instance.get_kind_display }}</h3><label class="form-check form-switch">{{ form.enabled }}<span>Enabled</span></label></div>
       <div class="service-recipient">{% if form.instance.kind == 'email' %}Recipient: {{ tenant.business_email|default:"No business email set" }}{% elif form.instance.kind == 'sms' %}Recipient: {{ tenant.business_phone|default:"No business phone set" }}{% else %}Kitchen ticket{% endif %}</div>
-      <div class="form-grid"><div class="field"><label class="form-label" for="{{ form.endpoint_url.id_for_label }}">Webhook URL</label>{{ form.endpoint_url }}</div><div class="field"><label class="form-label" for="{{ form.auth_token.id_for_label }}">Authentication token</label>{{ form.auth_token }}</div></div>
+      <div class="form-grid"><div class="field"><label class="form-label" for="{{ form.endpoint_url.id_for_label }}">Webhook URL</label>{{ form.endpoint_url }}</div><div class="field"><label class="form-label" for="{{ form.auth_token.id_for_label }}">Authentication token</label>{{ form.auth_token }}</div><div class="field full-width"><label class="form-label" for="{{ form.request_body.id_for_label }}">{{ form.request_body.label }}</label>{{ form.request_body }}{% if form.request_body.help_text %}<small>{{ form.request_body.help_text }}</small>{% endif %}{{ form.request_body.errors }}</div></div>
       {{ form.errors }}
     </article>
     {% endfor %}

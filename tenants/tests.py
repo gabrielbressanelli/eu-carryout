@@ -13,6 +13,7 @@ from catalog.models import MenuCategory, MenuItem, MenuItemModifierGroup, Modifi
 from ordering.models import Order, OrderItem
 from .models import Account, AccountMembership, BusinessHour, Tenant, TenantIntegration, TenantMembership
 from .services import ensure_tenant_onboarding_defaults
+from .services import build_integration_payload, build_order_event_payload
 from .uploads import TARGET_IMAGE_BYTES
 
 
@@ -291,6 +292,44 @@ class OnboardingFlowTests(TestCase):
         self.assertEqual(self.tenant.integrations.filter(enabled=True).count(), 3)
         self.assertEqual(self.client.post(self.manage_url(), self.integration_data(self.other)).status_code, 403)
         self.assertEqual(self.other.integrations.filter(enabled=True).count(), 0)
+
+    def test_order_event_includes_printer_friendly_aliases(self):
+        order = Order.objects.create(
+            tenant=self.tenant,
+            customer_name="Gabriel Bressanelli",
+            order_summary="1x Grilled chicken",
+            amount_paid="18.00",
+        )
+        payload = build_order_event_payload(order)
+        self.assertEqual(payload["type"], "Website Carryout")
+        self.assertEqual(payload["customerName"], "Gabriel Bressanelli")
+        self.assertEqual(payload["orderNumber"], str(order.pk))
+        self.assertEqual(payload["order_ref"], str(order.pk))
+
+    def test_integration_json_body_uses_order_placeholders(self):
+        order = Order.objects.create(
+            tenant=self.tenant,
+            customer_name="Gabriel Bressanelli",
+            order_summary="1x Grilled chicken",
+            amount_paid="18.00",
+        )
+        integration = TenantIntegration(
+            tenant=self.tenant,
+            kind=TenantIntegration.KIND_PRINT,
+            config={"request_body": {
+                "type": "Website Carryout",
+                "customerName": "{{ customer_name }}",
+                "order_summary": "{{ order_summary }}",
+                "orderNumber": "{{ order_id }}",
+            }},
+        )
+        payload = build_integration_payload(order, integration)
+        self.assertEqual(payload, {
+            "type": "Website Carryout",
+            "customerName": "Gabriel Bressanelli",
+            "order_summary": "1x Grilled chicken",
+            "orderNumber": order.pk,
+        })
 
     def test_hours_can_be_saved_but_not_reassigned(self):
         data = {"action": "hours", "hours-TOTAL_FORMS": "7", "hours-INITIAL_FORMS": "7"}

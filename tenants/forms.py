@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import AuthenticationForm
@@ -300,10 +302,20 @@ BusinessHourFormSet = modelformset_factory(
 
 
 class TenantIntegrationForm(forms.ModelForm):
+    request_body = forms.CharField(
+        required=False,
+        label="JSON request body",
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 6, "placeholder": '{\n  "type": "Website Carryout",\n  "customerName": "{{ customer_name }}",\n  "order_summary": "{{ order_summary }}",\n  "orderNumber": "{{ order_ref }}"\n}'}),
+        help_text="Optional JSON template. Use {{ customer_name }}, {{ order_summary }}, {{ order_ref }}, {{ pickup_at }}, and other order fields.",
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["kind"].disabled = True
         self.fields["enabled"].widget.attrs["aria-label"] = f"Enable {self.instance.get_kind_display()}"
+        request_body = (self.instance.config or {}).get("request_body")
+        if request_body:
+            self.initial["request_body"] = json.dumps(request_body, indent=2)
 
     class Meta:
         model = TenantIntegration
@@ -320,6 +332,31 @@ class TenantIntegrationForm(forms.ModelForm):
         if cleaned.get("enabled") and not cleaned.get("endpoint_url"):
             raise forms.ValidationError("Enabled services need an endpoint URL.")
         return cleaned
+
+    def clean_request_body(self):
+        raw = self.cleaned_data.get("request_body", "").strip()
+        if not raw:
+            return None
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise forms.ValidationError(f"Enter valid JSON (line {exc.lineno}, column {exc.colno}).")
+        if not isinstance(value, dict):
+            raise forms.ValidationError("The JSON request body must be an object.")
+        return value
+
+    def save(self, commit=True):
+        integration = super().save(commit=False)
+        config = dict(integration.config or {})
+        request_body = self.cleaned_data.get("request_body")
+        if request_body is None:
+            config.pop("request_body", None)
+        else:
+            config["request_body"] = request_body
+        integration.config = config
+        if commit:
+            integration.save()
+        return integration
 
 
 TenantIntegrationFormSet = modelformset_factory(
