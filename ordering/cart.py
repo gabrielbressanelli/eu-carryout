@@ -136,10 +136,8 @@ class Cart:
     def order_summary(self):
         parts = []
         for line in self.lines:
-            text = f"{line['quantity']}x {line['name']}"
-            if line.get("options"):
-                text += " (" + ", ".join(option["name"] for option in line["options"]) + ")"
+            parts.append(f"{line['quantity']}x {line['name']};")
+            parts.extend(f"- {option['name']};" for option in line.get("options", []))
             if line.get("note"):
-                text += " - " + line["note"]
-            parts.append(text)
-        return "; ".join(parts)
+                parts.append(f"- {line['note']};")
+        return " ".join(parts)

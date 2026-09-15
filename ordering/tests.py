@@ -170,6 +170,7 @@ class CustomerOrderingTests(TestCase):
         order = Order.objects.get()
         self.assertEqual(order.amount_paid, Decimal("26.00"))
         self.assertEqual(order.pickup_at, datetime(2026, 9, 10, 16, 20, tzinfo=dt_timezone.utc))
+        self.assertEqual(order.order_summary, "2x Pasta; - Cheese; - Half portion; - No salt;")
         self.assertEqual({option["name"] for option in order.items.get().options_snapshot}, {"Half portion", "Cheese"})
         self.assertIn("No salt", order.order_summary)
         self.assertEqual(build_order_event_payload(order)["items"][0]["note"], "No salt")
