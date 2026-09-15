@@ -9,60 +9,73 @@
     <link rel="stylesheet" href="/static/css/site.css">
   </head>
   <body>
-    <main class="container success-shell">
-      <div class="card mx-auto success-card">
-        <div class="card-body">
-          {% if tenant.logo_src %}<img src="{{ tenant.logo_src }}" alt="{{ tenant.name }}" class="success-logo">{% endif %}
-          <p class="text-uppercase text-muted small mb-2">Pickup order</p>
-          <h1 class="h3">Thanks{% if order.customer_name %}, {{ order.customer_name }}{% endif %}. Your order is in.</h1>
-          {% if payment_pending %}<p class="alert alert-warning mt-3 mb-0">Your payment went through at Stripe. We are finishing confirmation with the restaurant.</p>{% endif %}
+    <nav class="navbar navbar-expand-lg glass-nav fixed-top">
+      <div class="container px-4 px-lg-5 nav-main-row">
+        <a class="navbar-brand d-flex align-items-center gap-3" href="{% url 'menu' tenant_slug=tenant.slug %}" aria-label="{{ tenant.name }}">
+          {% if tenant.logo_src %}<img src="{{ tenant.logo_src }}" alt="{{ tenant.name }}" class="brand-logo">{% else %}<span>{{ tenant.name }}</span>{% endif %}
+        </a>
+        <div class="nav-actions"><a class="btn btn-outline-dark" href="{% url 'menu' tenant_slug=tenant.slug %}">Menu</a></div>
+      </div>
+    </nav>
 
-          <section class="success-section">
-            <h2 class="h5">Pickup time</h2>
+    <main class="container success-shell">
+      <header class="success-header">
+        <p class="text-uppercase text-muted small mb-2">Order confirmed</p>
+        <h1>Thanks{% if order.customer_name %}, {{ order.customer_name }}{% endif %}. Your order is in.</h1>
+        <p class="success-lede">Keep this page handy for your pickup details.</p>
+        {% if payment_pending %}<p class="alert alert-warning success-alert">Your payment went through at Stripe. We are finishing confirmation with the restaurant.</p>{% endif %}
+      </header>
+
+      <div class="success-layout">
+        <div class="success-side">
+          <section class="success-panel success-pickup-panel">
+            <p class="success-label">Pickup time</p>
             {% if order.pickup_at %}
               {% with pickup_timezone=order.pickup_timezone|default:tenant.timezone %}
-                <p class="success-pickup">{% timezone pickup_timezone %}{{ order.pickup_at|date:"D, M j, g:i A T" }}{% endtimezone %}</p>
+                <p class="success-pickup-time">{% timezone pickup_timezone %}{{ order.pickup_at|date:"D, M j, g:i A T" }}{% endtimezone %}</p>
               {% endwith %}
             {% else %}
-              <p class="success-pickup">As soon as possible</p>
+              <p class="success-pickup-time">As soon as possible</p>
             {% endif %}
+            <p class="success-help">Ready for pickup at the time shown above.</p>
           </section>
 
-          <section class="success-section">
-            <h2 class="h5">{{ tenant.name }}</h2>
+          <section class="success-panel">
+            <p class="success-label">Pickup location</p>
+            <h2>{{ tenant.name }}</h2>
             {% if tenant.address_lines %}
-              <address class="mb-2">{% for line in tenant.address_lines %}{{ line }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</address>
+              <address>{% for line in tenant.address_lines %}{{ line }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</address>
               <a class="btn btn-outline-dark btn-sm" href="{{ tenant.maps_url }}" target="_blank" rel="noopener">Open in Maps</a>
             {% else %}
-              <p class="text-muted mb-2">Pickup address will be provided by the restaurant.</p>
+              <p class="text-muted">Pickup address will be provided by the restaurant.</p>
             {% endif %}
-            {% if tenant.business_phone %}<p class="mb-1"><strong>Phone:</strong> {{ tenant.business_phone }}</p>{% endif %}
-            {% if tenant.business_email %}<p class="mb-0"><strong>Email:</strong> {{ tenant.business_email }}</p>{% endif %}
+            {% if tenant.business_phone %}<p class="success-contact"><strong>Phone:</strong> {{ tenant.business_phone }}</p>{% endif %}
+            {% if tenant.business_email %}<p class="success-contact"><strong>Email:</strong> {{ tenant.business_email }}</p>{% endif %}
           </section>
-
-          <section class="success-section">
-            <h2 class="h5">Order details</h2>
-            <div class="success-lines">
-              {% for item in order.items.all %}
-                <div class="success-line">
-                  <div>
-                    <strong>{{ item.quantity }}x {{ item.name_snapshot }}</strong>
-                    {% for option in item.options_snapshot %}<small>{{ option.group }}: {{ option.name }}</small>{% endfor %}
-                    {% if item.note %}<small>{{ item.note }}</small>{% endif %}
-                  </div>
-                  <span>${{ item.line_total }}</span>
-                </div>
-              {% empty %}
-                <p class="text-muted mb-0">{{ order.order_summary }}</p>
-              {% endfor %}
-            </div>
-            <div class="success-total"><span>Total</span><strong>${{ order.amount_paid }}</strong></div>
-          </section>
-
-          {% if order.customer_email %}<p class="text-muted small">Receipt email: {{ order.customer_email }}</p>{% endif %}
-          <a class="btn btn-dark w-100" href="{% url 'menu' tenant_slug=tenant.slug %}">Back to Menu</a>
         </div>
+
+        <section class="success-panel success-order-panel">
+          <div class="success-order-heading"><div><p class="success-label">Your order</p><h2>Order details</h2></div><strong>${{ order.amount_paid }}</strong></div>
+          <div class="success-lines">
+            {% for item in order.items.all %}
+              <div class="success-line">
+                <div>
+                  <strong>{{ item.quantity }}x {{ item.name_snapshot }}</strong>
+                  {% for option in item.options_snapshot %}<small>{{ option.group }}: {{ option.name }}</small>{% endfor %}
+                  {% if item.note %}<small>{{ item.note }}</small>{% endif %}
+                </div>
+                <span>${{ item.line_total }}</span>
+              </div>
+            {% empty %}
+              <p class="text-muted mb-0">{{ order.order_summary }}</p>
+            {% endfor %}
+          </div>
+          <div class="success-total"><span>Total paid</span><strong>${{ order.amount_paid }}</strong></div>
+          {% if order.customer_email %}<p class="text-muted small mb-0">Receipt email: {{ order.customer_email }}</p>{% endif %}
+        </section>
       </div>
+
+      <div class="success-actions"><a class="btn btn-dark" href="{% url 'menu' tenant_slug=tenant.slug %}">Back to Menu</a></div>
     </main>
   </body>
 </html>

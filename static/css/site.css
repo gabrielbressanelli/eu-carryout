@@ -311,14 +311,107 @@ body {
 }
 
 .success-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
+  max-width: 1080px;
+  padding-top: 2rem;
+  padding-bottom: 5rem;
 }
 
-.success-card {
-  max-width: 680px;
-  width: 100%;
+.success-header {
+  max-width: 760px;
+  padding: 2rem 0 2.5rem;
+}
+
+.success-header h1 {
+  margin-bottom: 0.75rem;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  font-weight: 700;
+}
+
+.success-lede {
+  margin: 0;
+  color: #6c757d;
+  font-size: 1.05rem;
+}
+
+.success-alert {
+  margin-top: 1.5rem;
+  margin-bottom: 0;
+}
+
+.success-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.success-side {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.success-panel {
+  padding: 1.5rem 0;
+  border-top: 1px solid #dee2e6;
+}
+
+.success-pickup-panel {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.success-label {
+  margin-bottom: 0.6rem;
+  color: #6c757d;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.success-panel h2 {
+  margin-bottom: 0.75rem;
+  font-size: 1.2rem;
+}
+
+.success-pickup-time {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  font-weight: 700;
+}
+
+.success-help {
+  margin: 0.5rem 0 0;
+  color: #6c757d;
+}
+
+.success-panel address {
+  margin-bottom: 1rem;
+  line-height: 1.55;
+}
+
+.success-contact {
+  margin: 1rem 0 0;
+}
+
+.success-order-panel {
+  padding: 1.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.success-order-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.success-order-heading .success-label {
+  margin-bottom: 0.35rem;
 }
 
 .success-logo {
@@ -329,20 +422,10 @@ body {
   margin-bottom: 18px;
 }
 
-.success-section {
-  padding: 18px 0;
-  border-top: 1px solid #edf0f2;
-}
-
-.success-pickup {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
 .success-lines {
   display: grid;
   gap: 12px;
+  padding-top: 1rem;
 }
 
 .success-line,
@@ -363,6 +446,29 @@ body {
   padding-top: 14px;
   border-top: 1px solid #edf0f2;
   font-size: 1.05rem;
+}
+
+.success-actions {
+  padding-top: 2rem;
+}
+
+@media (max-width: 767.98px) {
+  .success-shell {
+    padding-top: 1rem;
+  }
+
+  .success-header {
+    padding-bottom: 2rem;
+  }
+
+  .success-layout {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .success-order-panel {
+    margin-top: 1.5rem;
+  }
 }
 
 .empty-state {
