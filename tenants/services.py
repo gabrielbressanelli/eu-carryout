@@ -90,12 +90,20 @@ def _template_value(value, payload):
 
 def build_integration_payload(order, integration):
     payload = build_order_event_payload(order)
-    template = (integration.config or {}).get("request_body")
+    config = integration.config or {}
+    template = config.get("request_body") if isinstance(config, dict) else None
+    # Django admin users may enter the JSON body directly instead of wrapping it.
+    if template is None and isinstance(config, dict) and config:
+        template = config
     return _template_value(template, payload) if template else payload
 
 
 def _headers_for(integration):
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Carryout-Integration/1.0",
+    }
     if integration.auth_token:
         headers["Authorization"] = f"Bearer {integration.auth_token}"
     return headers

@@ -331,6 +331,15 @@ class OnboardingFlowTests(TestCase):
             "orderNumber": order.pk,
         })
 
+        integration.config = {
+            "type": "Website Carryout",
+            "customerName": "{{ customer_name }}",
+            "orderNumber": "{{ order_ref }}",
+        }
+        payload = build_integration_payload(order, integration)
+        self.assertEqual(payload["customerName"], "Gabriel Bressanelli")
+        self.assertEqual(payload["orderNumber"], str(order.pk))
+
     def test_hours_can_be_saved_but_not_reassigned(self):
         data = {"action": "hours", "hours-TOTAL_FORMS": "7", "hours-INITIAL_FORMS": "7"}
         for index, row in enumerate(self.tenant.business_hours.all()):
