@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.forms import modelformset_factory
 from django.utils.text import slugify
+from zoneinfo import available_timezones
 
 from catalog.models import MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
 
@@ -11,6 +12,15 @@ from .models import Account, AccountMembership, BusinessHour, Tenant, TenantInte
 from .uploads import RestaurantImageField
 
 RESERVED_SLUGS = {"admin", "api", "onboarding", "static", "media", "stripe", "restaurants", "login", "logout"}
+
+
+def _timezone_choices():
+    """Return IANA timezone choices without legacy aliases or fixed offsets."""
+    zones = sorted(
+        zone for zone in available_timezones()
+        if "/" in zone and not zone.startswith(("Etc/", "posix/", "right/"))
+    )
+    return [(zone, zone.replace("_", " ")) for zone in zones]
 
 
 class RestaurantLoginForm(AuthenticationForm):
@@ -176,6 +186,11 @@ class TenantOnboardingForm(forms.ModelForm):
     logo = RestaurantImageField(label="Restaurant logo", kind="logo")
     remove_logo = forms.BooleanField(required=False, widget=forms.HiddenInput(attrs={"data-remove-image-value": ""}))
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["timezone"].choices = _timezone_choices()
+        self.fields["timezone"].help_text = "Used for business hours, pickup times, and order confirmations."
+
     def save(self, commit=True):
         tenant = super().save(commit=False)
         if self.cleaned_data.get("remove_logo") and self.add_prefix("logo") not in self.files:
@@ -211,6 +226,11 @@ class TenantOnboardingForm(forms.ModelForm):
             "logo",
             "business_email",
             "business_phone",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state",
+            "postal_code",
             "timezone",
             "is_active",
         ]
@@ -221,7 +241,12 @@ class TenantOnboardingForm(forms.ModelForm):
             "primary_domain": forms.TextInput(attrs={"class": "form-control", "placeholder": "orders.restaurant.com"}),
             "business_email": forms.EmailInput(attrs={"class": "form-control"}),
             "business_phone": forms.TextInput(attrs={"class": "form-control"}),
-            "timezone": forms.TextInput(attrs={"class": "form-control"}),
+            "address_line1": forms.TextInput(attrs={"class": "form-control"}),
+            "address_line2": forms.TextInput(attrs={"class": "form-control"}),
+            "city": forms.TextInput(attrs={"class": "form-control"}),
+            "state": forms.TextInput(attrs={"class": "form-control"}),
+            "postal_code": forms.TextInput(attrs={"class": "form-control"}),
+            "timezone": forms.Select(attrs={"class": "form-select"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 

@@ -1,3 +1,5 @@
+from urllib.parse import quote_plus
+
 from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
@@ -46,6 +48,11 @@ class Tenant(models.Model):
     logo_url = models.URLField(max_length=500, blank=True, default="")
     business_email = models.EmailField(blank=True, default="")
     business_phone = models.CharField(max_length=32, blank=True, default="")
+    address_line1 = models.CharField(max_length=160, blank=True, default="")
+    address_line2 = models.CharField(max_length=160, blank=True, default="")
+    city = models.CharField(max_length=80, blank=True, default="")
+    state = models.CharField(max_length=40, blank=True, default="")
+    postal_code = models.CharField(max_length=20, blank=True, default="")
     timezone = models.CharField(max_length=64, default="America/Detroit")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -71,6 +78,20 @@ class Tenant(models.Model):
     @property
     def logo_src(self):
         return self.logo.url if self.logo else self.logo_url
+
+    @property
+    def address_lines(self):
+        region = " ".join(part for part in [self.state, self.postal_code] if part).strip()
+        locality = ", ".join(part for part in [self.city, region] if part).strip()
+        return [line for line in [self.address_line1, self.address_line2, locality] if line]
+
+    @property
+    def full_address(self):
+        return ", ".join(self.address_lines)
+
+    @property
+    def maps_url(self):
+        return f"https://www.google.com/maps/search/?api=1&query={quote_plus(self.full_address)}" if self.full_address else ""
 
 
 class TenantMembership(models.Model):

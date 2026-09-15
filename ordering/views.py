@@ -306,13 +306,16 @@ def create_checkout_session(request, tenant_slug):
 
 
 def checkout_success(request, tenant_slug):
-    _tenant_or_404(request, tenant_slug)
+    tenant = _tenant_or_404(request, tenant_slug)
     session_id = request.GET.get("session_id", "")
     if not session_id.startswith("cs_"):
         return redirect("menu", tenant_slug=tenant_slug)
+    draft_order = Order.objects.filter(stripe_session_id=session_id, tenant=tenant).select_related("tenant").prefetch_related("items").first()
 
     stripe_secret_key = getattr(settings, "STRIPE_SECRET_KEY", "")
     if not stripe_secret_key:
+        if draft_order:
+            return render(request, "ordering/success.html", {"tenant": tenant, "order": draft_order, "payment_pending": True})
         return HttpResponse("Payment received. Stripe confirmation is not configured locally.", status=200)
 
     try:
@@ -322,17 +325,26 @@ def checkout_success(request, tenant_slug):
 
     stripe.api_key = stripe_secret_key
     try:
-        tenant = _tenant_or_404(request, tenant_slug)
-        order = Order.objects.filter(stripe_session_id=session_id, tenant=tenant).select_related("tenant__account").first()
+        order = draft_order or Order.objects.filter(stripe_session_id=session_id, tenant=tenant).select_related("tenant__account").first()
         stripe_account_id = (order.tenant.account.stripe_account_id if order else tenant.account.stripe_account_id)
         if not stripe_account_id:
+            if draft_order:
+                return render(request, "ordering/success.html", {"tenant": tenant, "order": draft_order, "payment_pending": True})
             return HttpResponse("Thanks. We are confirming your payment.", status=200)
         session = stripe.checkout.Session.retrieve(session_id, expand=["customer_details"], stripe_account=stripe_account_id)
     except Exception:
         log.exception("Could not retrieve Stripe Checkout Session.")
+        if draft_order:
+            return render(request, "ordering/success.html", {"tenant": tenant, "order": draft_order, "payment_pending": True})
         return HttpResponse("Thanks. We are confirming your payment.", status=200)
 
-    order = mark_stripe_order_paid(session)
+    try:
+        order = mark_stripe_order_paid(session)
+    except Exception:
+        log.exception("Could not mark Stripe order paid.")
+        if draft_order:
+            return render(request, "ordering/success.html", {"tenant": tenant, "order": draft_order, "payment_pending": True})
+        return HttpResponse("Thanks. We are confirming your payment.", status=200)
     Cart(request).clear()
     return render(request, "ordering/success.html", {"tenant": order.tenant, "order": order})
 

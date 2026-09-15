@@ -60,9 +60,9 @@ class BusinessHourInline(admin.TabularInline):
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
-    list_display = ("name", "account", "slug", "primary_domain", "business_email", "business_phone", "is_active")
+    list_display = ("name", "account", "slug", "timezone", "primary_domain", "business_email", "business_phone", "city", "state", "is_active")
     list_filter = ("account", "is_active")
-    search_fields = ("name", "slug", "account__name", "primary_domain", "business_email", "business_phone")
+    search_fields = ("name", "slug", "account__name", "timezone", "primary_domain", "business_email", "business_phone", "address_line1", "city", "state", "postal_code")
     autocomplete_fields = ("account",)
     prepopulated_fields = {"slug": ("name",)}
     inlines = [TenantDomainInline, BusinessHourInline, TenantIntegrationInline]

@@ -18,7 +18,8 @@
   </form>
 </section>
 <section>
-  <div class="section-heading"><h2>Business hours</h2></div>
+  <div class="section-heading"><h2>Business hours</h2><span class="status-pill">{{ tenant.timezone }}</span></div>
+  <p class="text-muted">These hours and pickup times are interpreted in the restaurant's timezone.</p>
   <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hours">
     {{ hours_formset.management_form }}{{ hours_formset.non_form_errors }}
     <div class="hours-list">

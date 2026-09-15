@@ -13,7 +13,7 @@ from catalog.pricing import validate_and_price
 from tenants.hours import OrderingHours
 from tenants.models import BusinessHour, HoursOverride, Tenant, TenantMembership
 from tenants.services import build_order_event_payload
-from .models import Order
+from .models import Order, OrderItem
 
 
 class LandingPageTests(TestCase):
@@ -34,7 +34,16 @@ class LandingPageTests(TestCase):
 class CustomerOrderingTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.tenant = Tenant.objects.create(name="Kitchen", slug="kitchen", preparation_minutes=20)
+        cls.tenant = Tenant.objects.create(
+            name="Kitchen",
+            slug="kitchen",
+            preparation_minutes=20,
+            address_line1="160 Main St",
+            city="Northville",
+            state="MI",
+            postal_code="48167",
+            business_phone="+12485550100",
+        )
         cls.tenant.account.stripe_account_id = "acct_kitchen"
         cls.tenant.account.stripe_charges_enabled = True
         cls.tenant.account.stripe_onboarding_complete = True
@@ -193,6 +202,73 @@ class CustomerOrderingTests(TestCase):
             response = self.checkout()
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("payment_intent_data", created)
+
+    @override_settings(STRIPE_SECRET_KEY="test-key")
+    def test_checkout_success_retrieves_connected_session_and_marks_paid(self):
+        self.add()
+        order = Order.objects.create(
+            tenant=self.tenant,
+            customer_email="",
+            status=Order.STATUS_DRAFT,
+            amount_paid=Decimal("20.00"),
+            stripe_session_id="cs_test_success",
+        )
+        session = {
+            "id": "cs_test_success",
+            "metadata": {"tenant_id": str(self.tenant.pk), "order_id": str(order.pk)},
+            "customer_details": {"email": "guest@example.test", "name": "Guest", "phone": "+12485550123"},
+            "amount_total": 2000,
+            "payment_intent": "pi_test",
+        }
+        retrieved = {}
+
+        def retrieve_session(session_id, **kwargs):
+            retrieved["session_id"] = session_id
+            retrieved.update(kwargs)
+            return session
+
+        stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=SimpleNamespace(retrieve=retrieve_session)))
+        with patch.dict("sys.modules", {"stripe": stripe}):
+            response = self.client.get("/kitchen/checkout/success/?session_id=cs_test_success")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(retrieved["stripe_account"], "acct_kitchen")
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.STATUS_PAID)
+        self.assertEqual(order.customer_email, "guest@example.test")
+        self.assertContains(response, "160 Main St")
+        self.assertContains(response, "Open in Maps")
+
+    @override_settings(STRIPE_SECRET_KEY="test-key")
+    def test_checkout_success_still_shows_pickup_details_when_confirmation_is_pending(self):
+        order = Order.objects.create(
+            tenant=self.tenant,
+            customer_email="guest@example.test",
+            status=Order.STATUS_DRAFT,
+            amount_paid=Decimal("20.00"),
+            order_summary="1x Pasta",
+            pickup_at=datetime(2026, 9, 10, 16, 20, tzinfo=dt_timezone.utc),
+            pickup_timezone=self.tenant.timezone,
+            stripe_session_id="cs_test_pending",
+        )
+        OrderItem.objects.create(
+            order=order,
+            menu_item=self.item,
+            name_snapshot="Pasta",
+            quantity=1,
+            unit_price=Decimal("20.00"),
+        )
+
+        def retrieve_session(*args, **kwargs):
+            raise RuntimeError("Stripe is temporarily unavailable")
+
+        stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=SimpleNamespace(retrieve=retrieve_session)))
+        with patch.dict("sys.modules", {"stripe": stripe}):
+            response = self.client.get("/kitchen/checkout/success/?session_id=cs_test_pending")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your payment went through at Stripe")
+        self.assertContains(response, "Pickup time")
+        self.assertContains(response, "160 Main St")
+        self.assertContains(response, "Pasta")
 
     def test_closed_or_paused_store_cannot_start_payment(self):
         self.add()

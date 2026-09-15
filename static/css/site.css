@@ -317,7 +317,52 @@ body {
 }
 
 .success-card {
-  max-width: 560px;
+  max-width: 680px;
+  width: 100%;
+}
+
+.success-logo {
+  display: block;
+  width: 180px;
+  max-height: 72px;
+  object-fit: contain;
+  margin-bottom: 18px;
+}
+
+.success-section {
+  padding: 18px 0;
+  border-top: 1px solid #edf0f2;
+}
+
+.success-pickup {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.success-lines {
+  display: grid;
+  gap: 12px;
+}
+
+.success-line,
+.success-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.success-line small {
+  display: block;
+  color: #6c757d;
+  margin-top: 3px;
+}
+
+.success-total {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0f2;
+  font-size: 1.05rem;
 }
 
 .empty-state {

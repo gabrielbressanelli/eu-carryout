@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from tenants.models import Account, Tenant
 from tenants.services import ensure_tenant_onboarding_defaults
@@ -12,12 +13,22 @@ class Command(BaseCommand):
         parser.add_argument("--name", required=True, help="Restaurant display name.")
         parser.add_argument("--email", default="", help="Business email for notifications.")
         parser.add_argument("--phone", default="", help="Business phone for notifications.")
+        parser.add_argument("--address-line1", default="", help="Pickup street address.")
+        parser.add_argument("--address-line2", default="", help="Pickup suite, floor, or unit.")
+        parser.add_argument("--city", default="", help="Pickup city.")
+        parser.add_argument("--state", default="", help="Pickup state or region.")
+        parser.add_argument("--postal-code", default="", help="Pickup postal code.")
+        parser.add_argument("--timezone", default="America/Detroit", help="IANA timezone for business hours and pickup times, e.g. America/New_York.")
         parser.add_argument("--domain", default="", help="Optional primary custom domain.")
         parser.add_argument("--account", default="", help="Existing account slug. Defaults to the restaurant slug.")
         parser.add_argument("--account-name", default="", help="Account name when creating a new account.")
 
     def handle(self, *args, **options):
         slug = options["slug"].strip().lower()
+        try:
+            ZoneInfo(options["timezone"])
+        except (ZoneInfoNotFoundError, ValueError):
+            raise CommandError(f"Unknown timezone {options['timezone']!r}. Use an IANA timezone such as America/Detroit.")
         if slug in {"admin", "static", "media", "stripe", "api"}:
             raise CommandError(f"{slug!r} is reserved and cannot be used as a restaurant slug.")
 
@@ -34,6 +45,12 @@ class Command(BaseCommand):
                 "name": options["name"],
                 "business_email": options["email"],
                 "business_phone": options["phone"],
+                "address_line1": options["address_line1"],
+                "address_line2": options["address_line2"],
+                "city": options["city"],
+                "state": options["state"],
+                "postal_code": options["postal_code"],
+                "timezone": options["timezone"],
                 "primary_domain": options["domain"] or None,
             },
         )
