@@ -179,7 +179,7 @@ if os.environ.get("R2_BUCKET_NAME"):
             "default_acl": None,
             "custom_domain": os.environ.get("R2_PUBLIC_DOMAIN") or None,
             "querystring_auth": not bool(os.environ.get("R2_PUBLIC_DOMAIN")),
-            "file_overwrite": False,
+            "file_overwrite": True,
             "object_parameters": {"CacheControl": "max-age=86400"},
         },
     }
@@ -188,4 +188,3 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
 # R2 Bucket Images Conenction Variables
-

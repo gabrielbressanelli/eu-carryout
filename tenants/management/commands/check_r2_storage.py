@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -10,7 +12,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         default_config = settings.STORAGES.get("default", {})
         storage_options = default_config.get("OPTIONS", {})
-        test_name = "carryout/storage-smoke-test.txt"
+        test_name = f"carryout/storage-smoke-test-{uuid4().hex}.txt"
 
         self.stdout.write("Default storage backend: " + default_config.get("BACKEND", "<missing>"))
         for key in ("bucket_name", "endpoint_url", "custom_domain", "querystring_auth"):
