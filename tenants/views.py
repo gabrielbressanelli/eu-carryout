@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -22,6 +24,8 @@ from .forms import (
 from .models import BusinessHour, Tenant, TenantIntegration, HoursOverride
 from .services import ensure_tenant_onboarding_defaults
 
+
+log = logging.getLogger(__name__)
 
 SECTIONS = [("overview", "Business"), ("hours", "Business hours"), ("menu", "Menu items"),
             ("categories", "Categories"), ("modifiers", "Modifier groups"),
@@ -106,6 +110,7 @@ def restaurant_create(request):
             except IntegrityError:
                 form.add_error(None, "This restaurant or login already exists. Check the details and try again.")
             except (BotoCoreError, ClientError, OSError):
+                log.exception("Restaurant logo upload failed while creating a restaurant.")
                 form.add_error("logo", "The image could not be uploaded. Please choose the file and try again.")
             else:
                 messages.success(request, "Restaurant and login access created.")
@@ -157,6 +162,7 @@ def restaurant_manage(request, tenant):
             except IntegrityError:
                 form.add_error(None, "This restaurant URL or domain is already in use.")
             except (BotoCoreError, ClientError, OSError):
+                log.exception("Restaurant logo upload failed.", extra={"tenant_id": tenant.pk, "tenant_slug": tenant.slug})
                 form.add_error("logo", "The image could not be uploaded. Please choose the file and try again.")
             else:
                 messages.success(request, "Business profile saved.")
@@ -242,6 +248,10 @@ def catalog_edit(request, tenant, kind, object_id=None):
         except IntegrityError:
             form.add_error(None, "A record with these details already exists in this location.")
         except (BotoCoreError, ClientError, OSError):
+            log.exception(
+                "Catalog image upload failed.",
+                extra={"tenant_id": tenant.pk, "tenant_slug": tenant.slug, "catalog_kind": kind, "object_id": object_id},
+            )
             form.add_error(None, "The image could not be uploaded. Please choose the file and try again.")
         else:
             messages.success(request, f"{label.capitalize()} saved.")
