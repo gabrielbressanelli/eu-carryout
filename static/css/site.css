@@ -135,6 +135,12 @@ body {
   font-weight: 700;
 }
 
+@media (min-width: 768px) {
+  .menu-grid {
+    --bs-gutter-x: 2rem;
+  }
+}
+
 .menu-card {
   border-radius: 8px;
   border-color: #dee2e6;
@@ -144,26 +150,40 @@ body {
 
 .menu-card.has-image {
   display: grid;
-  grid-template-columns: 148px minmax(0, 1fr);
-  min-height: 190px;
+  grid-template-columns: 156px minmax(0, 1fr);
+  min-height: 180px;
 }
 
 .menu-card-image {
   width: 100%;
   height: 100%;
-  min-height: 190px;
-  object-fit: contain;
-  padding: 10px;
+  min-height: 180px;
+  object-fit: cover;
   background: #f8f9fa;
   border-right: 1px solid #edf0f2;
 }
 
-.menu-card h3 {
-  font-weight: 700;
+.menu-card .card-body {
+  gap: 10px;
+  padding: 16px;
 }
 
-.menu-card .text-muted {
-  min-height: 48px;
+.menu-card .card-body > .d-flex:first-child {
+  align-items: baseline;
+}
+
+.menu-card h3 {
+  font-weight: 700;
+  margin-bottom: 0;
+}
+
+.menu-card-description {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-height: 58px;
+  margin: 0;
+  line-height: 1.45;
 }
 
 .btn {
@@ -335,12 +355,19 @@ body {
 
 @media (max-width: 575.98px) {
   .menu-card.has-image {
-    grid-template-columns: 112px minmax(0, 1fr);
-    min-height: 164px;
+    grid-template-columns: 106px minmax(0, 1fr);
+    min-height: 152px;
   }
 
   .menu-card-image {
-    min-height: 164px;
-    padding: 8px;
+    min-height: 152px;
+  }
+
+  .menu-card .card-body {
+    padding: 14px;
+  }
+
+  .menu-card-description {
+    min-height: 44px;
   }
 }

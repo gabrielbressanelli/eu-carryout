@@ -42,7 +42,7 @@
       {% for category in categories %}
         <section id="{{ category.slug }}" class="menu-section">
           <h2>{{ category.name }}</h2>
-          <div class="row g-4">
+          <div class="row g-4 menu-grid">
             {% for item in category.items.all %}
               {% if item.is_active %}
                 <div class="col-md-6">
@@ -55,7 +55,7 @@
                         <h3 class="h5">{{ item.name }}</h3>
                         <strong>${{ item.price }}</strong>
                       </div>
-                      <p class="text-muted flex-grow-1">{{ item.description }}</p>
+                      <p class="text-muted menu-card-description">{{ item.description }}</p>
                       <button class="btn btn-dark" type="button" data-customize-url="{% url 'item_options' tenant.slug item.pk %}">Add</button>
                     </div>
                   </article>
