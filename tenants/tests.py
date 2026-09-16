@@ -1,5 +1,6 @@
 from io import BytesIO
 import json
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 import os
 from unittest.mock import patch
@@ -300,12 +301,16 @@ class OnboardingFlowTests(TestCase):
             customer_name="Gabriel Bressanelli",
             order_summary="1x Grilled chicken",
             amount_paid="18.00",
+            pickup_at=datetime(2026, 9, 16, 21, 30, tzinfo=dt_timezone.utc),
+            pickup_timezone="America/Detroit",
         )
         payload = build_order_event_payload(order)
         self.assertEqual(payload["type"], "Website Carryout")
         self.assertEqual(payload["customerName"], "Gabriel Bressanelli")
         self.assertEqual(payload["orderNumber"], str(order.pk))
         self.assertEqual(payload["order_ref"], str(order.pk))
+        self.assertEqual(payload["pickup_time"], "5:30 PM")
+        self.assertEqual(payload["pickUpTime"], "5:30 PM")
 
     def test_integration_json_body_uses_order_placeholders(self):
         order = Order.objects.create(

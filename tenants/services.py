@@ -1,8 +1,9 @@
 import json
 import logging
 import re
-from datetime import time
+from datetime import time, timezone as dt_timezone
 from urllib import error, request
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import get_object_or_404
@@ -48,6 +49,13 @@ def ensure_tenant_onboarding_defaults(tenant):
 def build_order_event_payload(order):
     tenant = order.tenant
     order_ref = str(order.id)
+    pickup_time = ""
+    if order.pickup_at:
+        try:
+            pickup_zone = ZoneInfo(order.pickup_timezone or tenant.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            pickup_zone = dt_timezone.utc
+        pickup_time = order.pickup_at.astimezone(pickup_zone).strftime("%I:%M %p").lstrip("0")
     return {
         "event": "order.paid",
         "type": "Website Carryout",
@@ -68,6 +76,8 @@ def build_order_event_payload(order):
         "amount_paid": str(order.amount_paid),
         "paid_at": order.paid_at.isoformat() if order.paid_at else "",
         "pickup_at": order.pickup_at.isoformat() if order.pickup_at else None,
+        "pickup_time": pickup_time,
+        "pickUpTime": pickup_time,
         "pickup_timezone": order.pickup_timezone,
         "items": [{"name": item.name_snapshot, "quantity": item.quantity, "unit_price": str(item.unit_price),
                    "options": item.options_snapshot, "note": item.note} for item in order.items.all()],
