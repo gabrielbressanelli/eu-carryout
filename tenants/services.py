@@ -192,6 +192,10 @@ def send_integration_event(order, integration):
 
 
 def run_post_payment_workflow(order):
+    run_enabled_integrations(order)
+
+
+def run_enabled_integrations(order):
     integrations = order.tenant.integrations.filter(
         enabled=True,
         kind__in=[

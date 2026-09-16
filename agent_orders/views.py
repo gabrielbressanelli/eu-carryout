@@ -16,8 +16,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from catalog.models import MenuItem
 from catalog.pricing import validate_and_price, effective_option_delta
 from tenants.hours import OrderingHours
-from tenants.models import TenantIntegration
-from tenants.services import get_tenant_by_slug, send_integration_event
+from tenants.services import get_tenant_by_slug, run_enabled_integrations
 
 from ordering.services import create_order_from_agent_cart
 from ordering.views import _platform_fee_amount_cents
@@ -536,9 +535,7 @@ def order_finalize(request, tenant_slug):
 
     order.stripe_session_id = session.id
     order.save(update_fields=["stripe_session_id", "updated_at"])
-    print_integration = tenant.integrations.filter(kind=TenantIntegration.KIND_PRINT, enabled=True).first()
-    if print_integration:
-        send_integration_event(order, print_integration)
+    run_enabled_integrations(order)
 
     return JsonResponse({
         "order_id": order.id,
