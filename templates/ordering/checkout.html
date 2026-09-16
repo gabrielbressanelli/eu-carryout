@@ -39,7 +39,7 @@
               {% csrf_token %}
               <h2 class="h5">Pickup time</h2>
               <p data-availability-message role="status">{{ availability.message }}</p>
-              <label for="pickup-time" class="form-label">{{ tenant.name }} pickup ({{ availability.timezone }})</label>
+              <label for="pickup-time" class="form-label">{{ tenant.name }} pickup</label>
               <select class="form-select mb-3" id="pickup-time" name="pickup" required data-pickup-select>
                 {% if availability.asap_available %}<option value="asap">As soon as possible</option>{% endif %}
                 {% for slot in availability.slots %}<option value="{{ slot.value }}">{{ slot.label }}</option>{% endfor %}

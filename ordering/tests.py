@@ -324,6 +324,8 @@ class OrderingHoursTests(TestCase):
         hours = self.hours(10)
         first = hours.slots()[0]
         self.assertEqual((first.hour, first.minute), (11, 20))
+        self.assertTrue(all(slot.date() == hours.now.date() for slot in hours.slots()))
+        self.assertNotIn("EDT", hours.payload()["slots"][0]["label"])
         self.assertEqual(hours.validate_pickup(first.isoformat()), first)
         for value in ["asap", "2026-09-10T11:00:00-04:00", "2026-09-10T22:00:00-04:00", "2027-09-10T11:20:00-04:00", "2026-09-10T11:20:00"]:
             with self.assertRaises(ValueError):

@@ -41,17 +41,16 @@ class OrderingHours:
         if not self.tenant.scheduled_pickup_enabled:
             return []
         slots = []
-        for offset in range(self.tenant.scheduling_days + 1):
-            date = self.now.date() + timedelta(days=offset)
-            window = self.window(date)
-            if not window:
-                continue
-            start, end = window
-            slot = start + timedelta(minutes=self.tenant.preparation_minutes)
-            while slot < end:
-                if slot >= self.earliest and self.real_local_time(slot):
-                    slots.append(slot)
-                slot += timedelta(minutes=self.tenant.pickup_interval_minutes)
+        date = self.now.date()
+        window = self.window(date)
+        if not window:
+            return slots
+        start, end = window
+        slot = start + timedelta(minutes=self.tenant.preparation_minutes)
+        while slot < end:
+            if slot >= self.earliest and self.real_local_time(slot):
+                slots.append(slot)
+            slot += timedelta(minutes=self.tenant.pickup_interval_minutes)
         return slots
 
     def validate_pickup(self, selection):
@@ -88,4 +87,4 @@ class OrderingHours:
         slots = self.slots()
         return {"is_open": self.is_open, "asap_available": bool(self.asap), "message": self.message,
                 "timezone": self.tenant.timezone, "can_order": bool(self.asap or slots),
-                "slots": [{"value": slot.isoformat(), "label": slot.strftime("%a, %b %d at %I:%M %p %Z")} for slot in slots]}
+                "slots": [{"value": slot.isoformat(), "label": slot.strftime("%a, %b %d at %I:%M %p")} for slot in slots]}
