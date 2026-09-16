@@ -1,4 +1,5 @@
 from io import BytesIO
+import json
 from pathlib import Path
 import os
 from unittest.mock import patch
@@ -336,6 +337,15 @@ class OnboardingFlowTests(TestCase):
             "customerName": "{{ customer_name }}",
             "orderNumber": "{{ order_ref }}",
         }
+        payload = build_integration_payload(order, integration)
+        self.assertEqual(payload["customerName"], "Gabriel Bressanelli")
+        self.assertEqual(payload["orderNumber"], str(order.pk))
+
+        integration.config = json.dumps({
+            "type": "Website Carryout",
+            "customerName": "{{ customer_name }}",
+            "orderNumber": "{{ order_ref }}",
+        })
         payload = build_integration_payload(order, integration)
         self.assertEqual(payload["customerName"], "Gabriel Bressanelli")
         self.assertEqual(payload["orderNumber"], str(order.pk))

@@ -91,6 +91,11 @@ def _template_value(value, payload):
 def build_integration_payload(order, integration):
     payload = build_order_event_payload(order)
     config = integration.config or {}
+    if isinstance(config, str):
+        try:
+            config = json.loads(config)
+        except json.JSONDecodeError:
+            config = {}
     template = config.get("request_body") if isinstance(config, dict) else None
     # Django admin users may enter the JSON body directly instead of wrapping it.
     if template is None and isinstance(config, dict) and config:
