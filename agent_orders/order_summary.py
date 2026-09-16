@@ -3,6 +3,7 @@ from decimal import Decimal
 from difflib import SequenceMatcher
 
 from catalog.models import MenuItem, ModifierOption
+from catalog.pricing import validate_and_price
 
 ITEM_BOUNDARY_RE = re.compile(r"(\d+)\s*x\s+", re.IGNORECASE)
 MIN_ITEM_SCORE = 0.74
@@ -89,3 +90,35 @@ def compute_total_from_summary(order_summary, tenant):
         total += unit_price * quantity
 
     return total.quantize(Decimal("0.01")), warnings
+
+
+def resolve_order_summary(order_summary, tenant):
+    """Resolve the agent's semicolon summary into validated cart lines."""
+    resolved = []
+    warnings = []
+    for quantity, chunk in _split_chunks(order_summary):
+        segments = [segment.strip().lstrip("-").strip() for segment in chunk.split(";") if segment.strip()]
+        if not segments:
+            warnings.append("Found a quantity with no item name.")
+            continue
+        item = _match_item(segments[0], tenant)
+        if not item:
+            warnings.append(f"Could not match item: {segments[0]!r}")
+            continue
+        options = []
+        for modifier_text in segments[1:]:
+            option = _match_option(item, modifier_text)
+            if not option:
+                warnings.append(f"Could not match modifier {modifier_text!r} for item {item.name!r}")
+                options = []
+                break
+            options.append(option)
+        if warnings and warnings[-1].startswith("Could not match modifier") and not options and len(segments) > 1:
+            continue
+        try:
+            unit_price, options_snapshot = validate_and_price(item, [option.id for option in options])
+        except ValueError as exc:
+            warnings.append(f"{item.name}: {exc}")
+            continue
+        resolved.append({"item": item, "quantity": quantity, "unit_price": unit_price, "options": options_snapshot})
+    return resolved, warnings

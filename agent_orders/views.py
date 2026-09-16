@@ -1,22 +1,35 @@
 import json
+import logging
 from datetime import timedelta
-from decimal import ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP
+from uuid import uuid4
 
+from django.conf import settings
+from django.core import signing
 from django.http import JsonResponse
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
 from catalog.models import MenuItem
 from catalog.pricing import validate_and_price, effective_option_delta
-from tenants.services import get_tenant_by_slug
+from tenants.hours import OrderingHours
+from tenants.models import TenantIntegration
+from tenants.services import get_tenant_by_slug, send_integration_event
 
+from ordering.services import create_order_from_agent_cart
+from ordering.views import _platform_fee_amount_cents
+from ordering.cart import Cart
 from .auth import authenticate_agent_request
 from .matching import search_menu, search_menu_by_category
 from .models import AgentCallCart, AgentCallCartItem
 from .order_summary import compute_total_from_summary
+from .order_summary import resolve_order_summary
 
 STALE_CART_MAX_AGE = timedelta(hours=4)
+log = logging.getLogger(__name__)
 
 
 def _tenant_or_404(request, tenant_slug):
@@ -341,3 +354,195 @@ def order_summary_total(request, tenant_slug):
         "exact_total": str(total),
         "warnings": warnings,
     })
+
+
+def _agent_checkout_token(tenant, session_id):
+    return signing.dumps({"tenant_id": tenant.id, "session_id": session_id}, salt="agent-checkout")
+
+
+def _save_resolved_agent_cart(tenant, session_id, resolved):
+    cart, _ = AgentCallCart.objects.get_or_create(tenant=tenant, session_id=session_id)
+    cart.items.all().delete()
+    for line in resolved:
+        AgentCallCartItem.objects.create(
+            cart=cart,
+            menu_item=line["item"],
+            quantity=line["quantity"],
+            unit_price=line["unit_price"],
+            options=line["options"],
+        )
+    return cart
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def order_finalize_summary(request, tenant_slug):
+    tenant = _tenant_or_404(request, tenant_slug)
+    auth_error = _require_agent_auth(request, tenant)
+    if auth_error:
+        return auth_error
+    try:
+        payload = json.loads(request.body)
+    except ValueError:
+        return JsonResponse({"error": "Invalid JSON body"}, status=400)
+    session_id = payload.get("session_id")
+    if not session_id or not payload.get("order_summary"):
+        return JsonResponse({"error": "session_id and order_summary are required"}, status=400)
+
+    resolved, warnings = resolve_order_summary(payload["order_summary"], tenant)
+    cart = _save_resolved_agent_cart(tenant, session_id, resolved)
+    checkout_url = request.build_absolute_uri(f"/api/{tenant.slug}/agent/checkout/{_agent_checkout_token(tenant, session_id)}/") if resolved else None
+    if warnings:
+        return JsonResponse({
+            "success": False,
+            "requires_review": True,
+            "checkout_url": checkout_url,
+            "resolved_summary": " ".join(
+                f"{line['quantity']}x {line['item'].name};" for line in resolved
+            ),
+            "unresolved": warnings,
+        }, status=422)
+
+    request._body = json.dumps({
+        "session_id": session_id,
+        "pickup": payload.get("pickup", "asap"),
+        "customer_name": payload.get("customer_name", ""),
+        "customer_email": payload.get("customer_email", ""),
+        "customer_phone": payload.get("customer_phone", ""),
+    }).encode("utf-8")
+    return order_finalize(request, tenant_slug)
+
+
+@require_GET
+def agent_checkout(request, tenant_slug, token):
+    tenant = _tenant_or_404(request, tenant_slug)
+    try:
+        data = signing.loads(token, salt="agent-checkout", max_age=1800)
+    except signing.BadSignature:
+        return JsonResponse({"error": "This checkout link is invalid or expired."}, status=404)
+    if data.get("tenant_id") != tenant.id:
+        return JsonResponse({"error": "Checkout link does not belong to this restaurant."}, status=404)
+    try:
+        agent_cart = AgentCallCart.objects.get(tenant=tenant, session_id=data["session_id"])
+    except (AgentCallCart.DoesNotExist, KeyError):
+        return JsonResponse({"error": "This checkout cart is no longer available."}, status=404)
+    website_cart = Cart(request)
+    website_cart.lines = []
+    for item in agent_cart.items.select_related("menu_item"):
+        website_cart.lines.append({
+            "key": uuid4().hex,
+            "menu_item_id": item.menu_item_id,
+            "name": item.menu_item.name,
+            "unit_price": str(item.unit_price),
+            "quantity": item.quantity,
+            "options": item.options,
+            "note": item.special_instructions,
+        })
+    website_cart.save()
+    return redirect("checkout", tenant_slug=tenant.slug)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def order_finalize(request, tenant_slug):
+    tenant = _tenant_or_404(request, tenant_slug)
+    auth_error = _require_agent_auth(request, tenant)
+    if auth_error:
+        return auth_error
+
+    try:
+        payload = json.loads(request.body)
+    except ValueError:
+        return JsonResponse({"error": "Invalid JSON body"}, status=400)
+
+    session_id = payload.get("session_id")
+    if not session_id:
+        return JsonResponse({"error": "session_id is required"}, status=400)
+    _cleanup_stale_carts(tenant)
+    try:
+        cart = AgentCallCart.objects.get(tenant=tenant, session_id=session_id)
+    except AgentCallCart.DoesNotExist:
+        return JsonResponse({"error": "Agent cart not found"}, status=404)
+
+    try:
+        pickup_at = OrderingHours(tenant).validate_pickup(payload.get("pickup", "asap"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc), "availability": OrderingHours(tenant).payload()}, status=400)
+
+    stripe_secret_key = getattr(settings, "STRIPE_SECRET_KEY", "")
+    stripe_account_id = tenant.account.stripe_account_id
+    if not stripe_secret_key or not stripe_account_id:
+        return JsonResponse({"error": "Stripe is not configured for this restaurant."}, status=503)
+    try:
+        import stripe
+    except ImportError:
+        return JsonResponse({"error": "Stripe package is not installed."}, status=503)
+
+    customer = {
+        "name": payload.get("customer_name", ""),
+        "email": payload.get("customer_email", ""),
+        "phone": payload.get("customer_phone", ""),
+    }
+    try:
+        order = create_order_from_agent_cart(cart, customer=customer, pickup_at=pickup_at)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    line_items = []
+    for item in order.items.all():
+        description = ", ".join(option["name"] for option in item.options_snapshot)
+        if item.note:
+            description = f"{description}; {item.note}" if description else item.note
+        line_items.append({
+            "price_data": {
+                "currency": "usd",
+                "product_data": {"name": item.name_snapshot, "description": description[:500] or "Carryout"},
+                "unit_amount": int((item.unit_price * 100).quantize(Decimal("1"))),
+            },
+            "quantity": item.quantity,
+        })
+    metadata = {
+        "tenant_id": str(tenant.id),
+        "tenant_slug": tenant.slug,
+        "order_id": str(order.id),
+        "order_source": "agent",
+        "order_summary": order.order_summary[:500],
+        "pickup_at": pickup_at.isoformat(),
+        "pickup_timezone": tenant.timezone,
+    }
+    payment_intent_data = {}
+    fee_amount = _platform_fee_amount_cents(order.amount_paid, tenant.account)
+    if fee_amount:
+        payment_intent_data["application_fee_amount"] = fee_amount
+
+    stripe.api_key = stripe_secret_key
+    try:
+        session_kwargs = {
+            "mode": "payment",
+            "line_items": line_items,
+            "success_url": request.build_absolute_uri(reverse("checkout_success", kwargs={"tenant_slug": tenant.slug})) + "?session_id={CHECKOUT_SESSION_ID}",
+            "cancel_url": request.build_absolute_uri(reverse("checkout", kwargs={"tenant_slug": tenant.slug})),
+            "customer_email": customer["email"] or None,
+            "phone_number_collection": {"enabled": True},
+            "metadata": metadata,
+            "stripe_account": stripe_account_id,
+        }
+        if payment_intent_data:
+            session_kwargs["payment_intent_data"] = payment_intent_data
+        session = stripe.checkout.Session.create(**session_kwargs)
+    except Exception:
+        log.exception("Could not create agent Stripe Checkout Session.")
+        return JsonResponse({"error": "Could not create payment link."}, status=502)
+
+    order.stripe_session_id = session.id
+    order.save(update_fields=["stripe_session_id", "updated_at"])
+    print_integration = tenant.integrations.filter(kind=TenantIntegration.KIND_PRINT, enabled=True).first()
+    if print_integration:
+        send_integration_event(order, print_integration)
+
+    return JsonResponse({
+        "order_id": order.id,
+        "amount": str(order.amount_paid),
+        "order_summary": order.order_summary,
+        "payment_url": session.url,
+    }, status=201)

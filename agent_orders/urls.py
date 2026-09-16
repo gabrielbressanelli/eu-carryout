@@ -12,4 +12,7 @@ urlpatterns = [
     path("cart/items/<str:line_id>", views.cart_item_detail, name="cart_item_detail"),
     path("cart/<str:session_id>", views.cart_detail, name="cart_detail"),
     path("order-summary/total", views.order_summary_total, name="order_summary_total"),
+    path("orders/finalize-summary", views.order_finalize_summary, name="order_finalize_summary"),
+    path("orders/finalize", views.order_finalize, name="order_finalize"),
+    path("checkout/<str:token>/", views.agent_checkout, name="agent_checkout"),
 ]

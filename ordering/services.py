@@ -4,6 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from catalog.models import MenuItem
+from catalog.pricing import validate_and_price
 from tenants.models import Tenant
 from tenants.services import run_post_payment_workflow
 
@@ -65,6 +66,49 @@ def create_order_from_cart(cart, stripe_session_id="", customer=None, status=Ord
     return order
 
 
+def create_order_from_agent_cart(agent_cart, customer=None, pickup_at=None):
+    customer = customer or {}
+    cart_items = list(agent_cart.items.select_related("menu_item", "menu_item__category").order_by("created_at", "id"))
+    if not cart_items:
+        raise ValueError("Agent cart is empty.")
+
+    validated_items = []
+    total = Decimal("0.00")
+    summary_parts = []
+    for cart_item in cart_items:
+        option_ids = [option.get("id") for option in cart_item.options if option.get("id") is not None]
+        unit_price, options = validate_and_price(cart_item.menu_item, option_ids)
+        total += unit_price * cart_item.quantity
+        summary_parts.append(f"{cart_item.quantity}x {cart_item.menu_item.name};")
+        summary_parts.extend(f"- {option['name']};" for option in options)
+        if cart_item.special_instructions:
+            summary_parts.append(f"- {cart_item.special_instructions};")
+        validated_items.append((cart_item, unit_price, options))
+
+    with transaction.atomic():
+        order = Order.objects.create(
+            tenant=agent_cart.tenant,
+            pickup_at=pickup_at,
+            pickup_timezone=agent_cart.tenant.timezone,
+            customer_email=customer.get("email") or "",
+            customer_name=customer.get("name") or "",
+            customer_phone=customer.get("phone") or "",
+            amount_paid=total.quantize(Decimal("0.01")),
+            order_summary=" ".join(summary_parts),
+        )
+        for cart_item, unit_price, options in validated_items:
+            OrderItem.objects.create(
+                order=order,
+                menu_item=cart_item.menu_item,
+                name_snapshot=cart_item.menu_item.name,
+                quantity=cart_item.quantity,
+                unit_price=unit_price,
+                options_snapshot=options,
+                note=cart_item.special_instructions,
+            )
+    return order
+
+
 def mark_stripe_order_paid(session):
     session = stripe_payload(session)
     metadata = session.get("metadata") or {}
@@ -110,5 +154,6 @@ def mark_stripe_order_paid(session):
                 "paid_at": timezone.now(),
             },
         )
-    run_post_payment_workflow(order)
+    if metadata.get("order_source") != "agent":
+        run_post_payment_workflow(order)
     return order
