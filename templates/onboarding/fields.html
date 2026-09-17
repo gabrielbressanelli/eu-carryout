@@ -14,8 +14,6 @@
       <p class="upload-error" data-upload-error role="alert"></p>
       {{ field.errors }}
     </div>
-  {% elif field.field.widget.input_type == 'checkbox' %}
-    <div class="field checkbox-field"><label class="form-check form-switch">{{ field }}<span class="form-check-label">{{ field.label }}</span></label>{{ field.errors }}</div>
   {% elif field.name == 'dietary_tags' %}
     <div class="field dietary-field">
       <span class="form-label">{{ field.label }}</span>
@@ -28,6 +26,8 @@
       </div>
       {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}
     </div>
+  {% elif field.field.widget.input_type == 'checkbox' %}
+    <div class="field checkbox-field"><label class="form-check form-switch">{{ field }}<span class="form-check-label">{{ field.label }}</span></label>{{ field.errors }}</div>
   {% else %}
     <div class="field {% if field.name == 'description' or field.name == 'alias_text' %}full-width{% endif %}">
       <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{{ field.errors }}

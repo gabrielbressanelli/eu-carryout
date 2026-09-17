@@ -397,7 +397,7 @@ class MenuItemForm(forms.ModelForm):
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "dietary_tags": forms.SelectMultiple(attrs={"class": "form-select", "size": 4}),
+            "dietary_tags": forms.CheckboxSelectMultiple(attrs={"class": "dietary-input"}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
@@ -487,7 +487,7 @@ class ModifierOptionForm(forms.ModelForm):
         self.fields["price_multiplier"].required = False
         self.fields["price_multiplier"].label = "Base price multiplier (0.50 = half portion)"
         self.fields["is_default"].label = "Selected by default"
-        self.fields["dietary_tags"].widget.attrs.update({"class": "form-select", "size": 4})
+        self.fields["dietary_tags"].widget.attrs.update({"class": "dietary-input"})
 
     class Meta:
         model = ModifierOption
