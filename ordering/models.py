@@ -14,15 +14,11 @@ class Order(models.Model):
         (STATUS_CANCELLED, "Cancelled"),
     ]
     FULFILLMENT_PENDING = "pending"
-    FULFILLMENT_PREPARING = "preparing"
-    FULFILLMENT_READY = "ready"
-    FULFILLMENT_COMPLETED = "completed"
+    FULFILLMENT_PICKED_UP = "picked_up"
     FULFILLMENT_CANCELLED = "cancelled"
     FULFILLMENT_CHOICES = [
         (FULFILLMENT_PENDING, "Pending"),
-        (FULFILLMENT_PREPARING, "Preparing"),
-        (FULFILLMENT_READY, "Ready"),
-        (FULFILLMENT_COMPLETED, "Completed"),
+        (FULFILLMENT_PICKED_UP, "Picked up"),
         (FULFILLMENT_CANCELLED, "Cancelled"),
     ]
 

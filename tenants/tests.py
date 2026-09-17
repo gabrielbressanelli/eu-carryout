@@ -48,7 +48,7 @@ class OnboardingFlowTests(TestCase):
     def test_order_operations_page_loads_for_assigned_location(self):
         response = self.client.get(reverse("order_operations", args=[self.tenant.slug]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Current orders")
+        self.assertContains(response, "Pending")
         self.assertContains(response, "Today")
 
     def editor_url(self, kind, record=None, delete=False, tenant=None):

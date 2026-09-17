@@ -7,18 +7,25 @@
   <a class="btn btn-outline-dark" href="{% url 'menu' tenant.slug %}" target="_blank" rel="noopener"><i data-lucide="external-link"></i> Ordering site</a>
 </header>
 <div class="operations-tabs" aria-label="Order views">
-  <a href="{% url 'order_operations' tenant.slug %}?view=current&period={{ period }}{% if selected_date %}&date={{ selected_date }}{% endif %}" {% if view == 'current' %}class="is-current"{% endif %}>Current orders</a>
-  <a href="{% url 'order_operations' tenant.slug %}?view=history&period={{ period }}{% if selected_date %}&date={{ selected_date }}{% endif %}" {% if view == 'history' %}class="is-current"{% endif %}>Order history</a>
+  <a href="{% url 'order_operations' tenant.slug %}?status=pending&period={{ period }}{% if selected_date %}&date={{ selected_date }}{% endif %}" {% if status == 'pending' %}class="is-current"{% endif %}>Pending</a>
+  <a href="{% url 'order_operations' tenant.slug %}?status=picked_up&period={{ period }}{% if selected_date %}&date={{ selected_date }}{% endif %}" {% if status == 'picked_up' %}class="is-current"{% endif %}>Picked up</a>
+  <a href="{% url 'order_operations' tenant.slug %}?status=cancelled&period={{ period }}{% if selected_date %}&date={{ selected_date }}{% endif %}" {% if status == 'cancelled' %}class="is-current"{% endif %}>Cancelled</a>
 </div>
-<form method="get" class="operations-filter">
-  <input type="hidden" name="view" value="{{ view }}">
-  <label for="order-period">Show orders</label>
-  <select id="order-period" name="period" class="form-select" onchange="this.form.submit()">
-    {% for value, label in period_choices %}<option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select>
-  <label class="specific-date{% if period != 'date' %} is-hidden{% endif %}" for="order-date">Date</label>
-  <input id="order-date" class="form-control specific-date{% if period != 'date' %} is-hidden{% endif %}" type="date" name="date" value="{{ selected_date }}" onchange="this.form.submit()">
-</form>
+<div class="operations-filter" data-order-filter>
+  <span class="operations-filter-label">Orders from</span>
+  <div class="operations-presets" role="group" aria-label="Order date range">
+    <a href="{% url 'order_operations' tenant.slug %}?status={{ status }}&period=today" class="{% if period == 'today' %}is-current{% endif %}">Today</a>
+    <a href="{% url 'order_operations' tenant.slug %}?status={{ status }}&period=yesterday" class="{% if period == 'yesterday' %}is-current{% endif %}">Yesterday</a>
+    <a href="{% url 'order_operations' tenant.slug %}?status={{ status }}&period=last_7_days" class="{% if period == 'last_7_days' %}is-current{% endif %}">Last 7 days</a>
+    <a href="{% url 'order_operations' tenant.slug %}?status={{ status }}&period=all" class="{% if period == 'all' %}is-current{% endif %}">All time</a>
+    <button type="button" class="{% if period == 'date' %}is-current{% endif %}" data-specific-date-toggle aria-expanded="{% if period == 'date' %}true{% else %}false{% endif %}"><i data-lucide="calendar"></i> Specific date</button>
+  </div>
+  <form method="get" class="specific-date-form{% if period != 'date' %} is-hidden{% endif %}" data-specific-date-form>
+    <input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="period" value="date">
+    <label class="visually-hidden" for="order-date">Choose order date</label>
+    <input id="order-date" class="form-control" type="date" name="date" value="{{ selected_date }}" required data-specific-date-input>
+  </form>
+</div>
 <section class="operations-list">
   {% for row in orders %}
     <article class="operation-order">
@@ -31,7 +38,7 @@
         {% for item in row.order.items.all %}<div class="operation-item"><span>{{ item.quantity }}x {{ item.name_snapshot }}</span><strong>${{ item.line_total }}</strong>{% for option in item.options_snapshot %}<small>{{ option.group }}: {{ option.name }}</small>{% endfor %}{% if item.note %}<small>Note: {{ item.note }}</small>{% endif %}</div>{% empty %}<p class="text-muted">No item details recorded.</p>{% endfor %}
       </div>
       <form method="post" class="operation-actions">
-        {% csrf_token %}<input type="hidden" name="order_id" value="{{ row.order.id }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="date" value="{{ selected_date }}">
+        {% csrf_token %}<input type="hidden" name="order_id" value="{{ row.order.id }}"><input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="date" value="{{ selected_date }}">
         <label class="visually-hidden" for="order-status-{{ row.order.id }}">Update order status</label>
         <select id="order-status-{{ row.order.id }}" name="fulfillment_status" class="form-select">
           {% for value, label in fulfillment_choices %}<option value="{{ value }}" {% if row.order.fulfillment_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
@@ -40,7 +47,7 @@
       </form>
     </article>
   {% empty %}
-    <div class="empty-state"><i data-lucide="clipboard-check"></i><h2>{% if view == 'history' %}No past orders{% else %}No current orders{% endif %}</h2><p>{% if view == 'history' %}Completed and cancelled orders will appear here.{% else %}New orders will appear here as they are created.{% endif %}</p></div>
+    <div class="empty-state"><i data-lucide="clipboard-check"></i><h2>No {{ status|cut:"_" }} orders</h2><p>Orders in this category will appear here.</p></div>
   {% endfor %}
 </section>
 {% endblock %}

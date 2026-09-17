@@ -32,6 +32,20 @@
       list.querySelector("[data-search-empty]").hidden = matches > 0 || !query;
     });
   });
+  document.querySelectorAll("[data-specific-date-toggle]").forEach((button) => {
+    const filter = button.closest("[data-order-filter]");
+    const form = filter?.querySelector("[data-specific-date-form]");
+    const input = form?.querySelector("[data-specific-date-input]");
+    if (!form) return;
+    button.addEventListener("click", () => {
+      const open = form.classList.toggle("is-hidden");
+      button.setAttribute("aria-expanded", String(!open));
+      if (!open) input?.focus();
+    });
+    input?.addEventListener("change", () => {
+      if (input.value) form.submit();
+    });
+  });
   document.querySelectorAll("form[data-confirm]").forEach((form) => {
     form.addEventListener("submit", (event) => {
       if (!window.confirm(form.dataset.confirm)) event.preventDefault();

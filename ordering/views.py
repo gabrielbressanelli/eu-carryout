@@ -37,12 +37,14 @@ def order_operations(request, tenant):
             return HttpResponse("Invalid fulfillment status.", status=400)
         order.fulfillment_status = next_status
         order.save(update_fields=["fulfillment_status", "updated_at"])
-        query = f"view={request.POST.get('view', 'current')}&period={request.POST.get('period', 'today')}"
+        query = f"status={request.POST.get('status', 'pending')}&period={request.POST.get('period', 'today')}"
         if request.POST.get("date"):
             query += f"&date={request.POST['date']}"
         return redirect(f"{reverse('order_operations', args=[tenant.slug])}?{query}")
 
-    view = request.GET.get("view", "current")
+    status = request.GET.get("status", Order.FULFILLMENT_PENDING)
+    if status not in {value for value, _label in Order.FULFILLMENT_CHOICES}:
+        status = Order.FULFILLMENT_PENDING
     period = request.GET.get("period", "today")
     selected_date = request.GET.get("date", "")
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -70,11 +72,7 @@ def order_operations(request, tenant):
         start_at = timezone.make_aware(datetime.combine(start_date, datetime.min.time()), zone).astimezone(dt_timezone.utc)
         end_at = timezone.make_aware(datetime.combine(end_date + timedelta(days=1), datetime.min.time()), zone).astimezone(dt_timezone.utc)
         base = base.filter(created_at__gte=start_at, created_at__lt=end_at)
-    if view == "history":
-        orders = base.filter(fulfillment_status__in=[Order.FULFILLMENT_COMPLETED, Order.FULFILLMENT_CANCELLED])
-    else:
-        view = "current"
-        orders = base.exclude(fulfillment_status__in=[Order.FULFILLMENT_COMPLETED, Order.FULFILLMENT_CANCELLED])
+    orders = base.filter(fulfillment_status=status)
 
     order_rows = []
     for order in orders:
@@ -89,7 +87,7 @@ def order_operations(request, tenant):
     return render(request, "ordering/operations.html", {
         "tenant": tenant,
         "orders": order_rows,
-        "view": view,
+        "status": status,
         "period": period,
         "selected_date": selected_date,
         "period_choices": [("today", "Today"), ("yesterday", "Yesterday"), ("last_7_days", "Last 7 days"), ("all", "All time"), ("date", "Specific date")],
