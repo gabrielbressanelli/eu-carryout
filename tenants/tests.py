@@ -45,6 +45,12 @@ class OnboardingFlowTests(TestCase):
     def manage_url(self, tenant=None):
         return reverse("onboarding:restaurant_manage", args=[(tenant or self.tenant).slug])
 
+    def test_order_operations_page_loads_for_assigned_location(self):
+        response = self.client.get(reverse("order_operations", args=[self.tenant.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Current orders")
+        self.assertContains(response, "Today")
+
     def editor_url(self, kind, record=None, delete=False, tenant=None):
         route = "catalog_delete" if delete else "catalog_edit" if record else "catalog_create"
         args = [(tenant or self.tenant).slug, kind]

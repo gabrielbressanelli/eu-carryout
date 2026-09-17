@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 
 from django.conf import settings
@@ -67,8 +67,8 @@ def order_operations(request, tenant):
 
     base = tenant.orders.select_related("tenant").prefetch_related("items").order_by("-created_at")
     if start_date:
-        start_at = timezone.make_aware(datetime.combine(start_date, datetime.min.time()), zone).astimezone(timezone.utc)
-        end_at = timezone.make_aware(datetime.combine(end_date + timedelta(days=1), datetime.min.time()), zone).astimezone(timezone.utc)
+        start_at = timezone.make_aware(datetime.combine(start_date, datetime.min.time()), zone).astimezone(dt_timezone.utc)
+        end_at = timezone.make_aware(datetime.combine(end_date + timedelta(days=1), datetime.min.time()), zone).astimezone(dt_timezone.utc)
         base = base.filter(created_at__gte=start_at, created_at__lt=end_at)
     if view == "history":
         orders = base.filter(fulfillment_status__in=[Order.FULFILLMENT_COMPLETED, Order.FULFILLMENT_CANCELLED])
