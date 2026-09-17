@@ -13,6 +13,18 @@ class Order(models.Model):
         (STATUS_PAID, "Paid"),
         (STATUS_CANCELLED, "Cancelled"),
     ]
+    FULFILLMENT_PENDING = "pending"
+    FULFILLMENT_PREPARING = "preparing"
+    FULFILLMENT_READY = "ready"
+    FULFILLMENT_COMPLETED = "completed"
+    FULFILLMENT_CANCELLED = "cancelled"
+    FULFILLMENT_CHOICES = [
+        (FULFILLMENT_PENDING, "Pending"),
+        (FULFILLMENT_PREPARING, "Preparing"),
+        (FULFILLMENT_READY, "Ready"),
+        (FULFILLMENT_COMPLETED, "Completed"),
+        (FULFILLMENT_CANCELLED, "Cancelled"),
+    ]
 
     tenant = models.ForeignKey("tenants.Tenant", on_delete=models.CASCADE, related_name="orders")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
@@ -20,6 +32,7 @@ class Order(models.Model):
     customer_name = models.CharField(max_length=120, blank=True, default="")
     customer_phone = models.CharField(max_length=32, blank=True, default="")
     status = models.CharField(max_length=24, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    fulfillment_status = models.CharField(max_length=24, choices=FULFILLMENT_CHOICES, default=FULFILLMENT_PENDING)
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     order_summary = models.TextField(blank=True, default="")
     stripe_session_id = models.CharField(max_length=255, unique=True, null=True, blank=True)

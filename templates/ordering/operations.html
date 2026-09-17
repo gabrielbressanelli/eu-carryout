@@ -1,0 +1,37 @@
+{% extends "onboarding/base.html" %}
+{% load static %}
+{% block title %}Orders | {{ tenant.name }}{% endblock %}
+{% block content %}
+<header class="onboarding-header">
+  <div><p class="section-kicker">{{ tenant.name }} operations</p><h1>Orders</h1></div>
+  <a class="btn btn-outline-dark" href="{% url 'menu' tenant.slug %}" target="_blank" rel="noopener"><i data-lucide="external-link"></i> Ordering site</a>
+</header>
+<div class="operations-tabs" aria-label="Order views">
+  <a href="{% url 'order_operations' tenant.slug %}?view=current" {% if view == 'current' %}class="is-current"{% endif %}>Current orders</a>
+  <a href="{% url 'order_operations' tenant.slug %}?view=history" {% if view == 'history' %}class="is-current"{% endif %}>Order history</a>
+</div>
+<section class="operations-list">
+  {% for row in orders %}
+    <article class="operation-order">
+      <div class="operation-order-head">
+        <div><p class="section-kicker">Order #{{ row.order.id }}</p><h2>{{ row.order.customer_name|default:"Guest customer" }}</h2><small>{{ row.order.created_at|date:"M j, Y g:i A" }}{% if row.order.customer_phone %} · {{ row.order.customer_phone }}{% endif %}</small></div>
+        <div class="operation-badges"><span class="status-pill {% if row.order.status == 'paid' %}is-on{% endif %}">{% if row.order.status == 'paid' %}Paid{% else %}Payment pending{% endif %}</span><span class="status-pill fulfillment-{{ row.order.fulfillment_status }}">{{ row.order.get_fulfillment_status_display }}</span></div>
+      </div>
+      <div class="operation-order-meta"><strong>Pickup: {{ row.pickup_label }}</strong><strong>${{ row.order.amount_paid }}</strong></div>
+      <div class="operation-items">
+        {% for item in row.order.items.all %}<div class="operation-item"><span>{{ item.quantity }}x {{ item.name_snapshot }}</span><strong>${{ item.line_total }}</strong>{% for option in item.options_snapshot %}<small>{{ option.group }}: {{ option.name }}</small>{% endfor %}{% if item.note %}<small>Note: {{ item.note }}</small>{% endif %}</div>{% empty %}<p class="text-muted">No item details recorded.</p>{% endfor %}
+      </div>
+      <form method="post" class="operation-actions">
+        {% csrf_token %}<input type="hidden" name="order_id" value="{{ row.order.id }}"><input type="hidden" name="view" value="{{ view }}">
+        <label class="visually-hidden" for="order-status-{{ row.order.id }}">Update order status</label>
+        <select id="order-status-{{ row.order.id }}" name="fulfillment_status" class="form-select">
+          {% for value, label in fulfillment_choices %}<option value="{{ value }}" {% if row.order.fulfillment_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-dark" type="submit"><i data-lucide="check"></i> Update order</button>
+      </form>
+    </article>
+  {% empty %}
+    <div class="empty-state"><i data-lucide="clipboard-check"></i><h2>{% if view == 'history' %}No past orders{% else %}No current orders{% endif %}</h2><p>{% if view == 'history' %}Completed and cancelled orders will appear here.{% else %}New orders will appear here as they are created.{% endif %}</p></div>
+  {% endfor %}
+</section>
+{% endblock %}

@@ -498,6 +498,7 @@ class ModifierOptionForm(forms.ModelForm):
             "price_delta": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "price_multiplier": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
             "is_default": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "dietary_tags": forms.CheckboxSelectMultiple(attrs={"class": "dietary-input"}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }

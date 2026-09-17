@@ -27,7 +27,7 @@ from .services import ensure_tenant_onboarding_defaults
 
 log = logging.getLogger(__name__)
 
-SECTIONS = [("overview", "Business"), ("hours", "Business hours"), ("menu", "Menu items"),
+SECTIONS = [("overview", "Business"), ("orders", "Orders"), ("hours", "Business hours"), ("menu", "Menu items"),
             ("categories", "Categories"), ("modifiers", "Modifier groups"),
             ("options", "Modifier options"), ("links", "Item assignments"), ("services", "Services")]
 EDITORS = {

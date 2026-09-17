@@ -15,6 +15,7 @@ urlpatterns = [
     path("<slug:tenant_slug>/checkout/", views.checkout, name="checkout"),
     path("<slug:tenant_slug>/checkout/create-session/", views.create_checkout_session, name="create_checkout_session"),
     path("<slug:tenant_slug>/checkout/success/", views.checkout_success, name="checkout_success"),
+    path("<slug:tenant_slug>/orders/operations/", views.order_operations, name="order_operations"),
     path("stripe/webhook/", views.stripe_webhook, name="stripe_webhook"),
     path("<slug:tenant_slug>/orders/", views.orders_by_email, name="orders_by_email"),
 ]

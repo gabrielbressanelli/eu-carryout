@@ -10,10 +10,12 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods
 
 from catalog.models import MenuCategory, MenuItem
 from catalog.pricing import modifier_payload, validate_and_price
 from tenants.services import get_tenant_by_slug
+from tenants.access import restaurant_access
 from tenants.hours import OrderingHours
 
 from .cart import Cart
@@ -21,6 +23,46 @@ from .models import Order
 from .services import create_order_from_cart, mark_stripe_order_paid, stripe_payload
 
 log = logging.getLogger(__name__)
+
+
+@restaurant_access
+@require_http_methods(["GET", "POST"])
+def order_operations(request, tenant):
+    if request.method == "POST":
+        order = get_object_or_404(tenant.orders, pk=request.POST.get("order_id"))
+        next_status = request.POST.get("fulfillment_status")
+        allowed = dict(Order.FULFILLMENT_CHOICES)
+        if next_status not in allowed:
+            return HttpResponse("Invalid fulfillment status.", status=400)
+        order.fulfillment_status = next_status
+        order.save(update_fields=["fulfillment_status", "updated_at"])
+        return redirect(f"{reverse('order_operations', args=[tenant.slug])}?view={request.POST.get('view', 'current')}")
+
+    view = request.GET.get("view", "current")
+    base = tenant.orders.select_related("tenant").prefetch_related("items").order_by("pickup_at", "created_at")
+    if view == "history":
+        orders = base.filter(fulfillment_status__in=[Order.FULFILLMENT_COMPLETED, Order.FULFILLMENT_CANCELLED])
+    else:
+        view = "current"
+        orders = base.exclude(fulfillment_status__in=[Order.FULFILLMENT_COMPLETED, Order.FULFILLMENT_CANCELLED])
+
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    order_rows = []
+    for order in orders:
+        try:
+            zone = ZoneInfo(order.pickup_timezone or tenant.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            zone = timezone.get_current_timezone()
+        order_rows.append({
+            "order": order,
+            "pickup_label": timezone.localtime(order.pickup_at, zone).strftime("%b %-d, %-I:%M %p") if order.pickup_at else "As soon as possible",
+        })
+    return render(request, "ordering/operations.html", {
+        "tenant": tenant,
+        "orders": order_rows,
+        "view": view,
+        "fulfillment_choices": Order.FULFILLMENT_CHOICES,
+    })
 
 
 def _platform_fee_amount_cents(total, account):
