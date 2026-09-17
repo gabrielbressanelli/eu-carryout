@@ -408,6 +408,7 @@ class MenuItemForm(forms.ModelForm):
         if tenant:
             self.fields["category"].queryset = MenuCategory.objects.filter(tenant=tenant).order_by("sort_order", "name")
             self.fields["dietary_tags"].queryset = DietaryTag.objects.filter(tenant=tenant)
+        self.fields["dietary_tags"].help_text = "Select every label that applies to this menu item."
         self.fields["category"].label_from_instance = lambda category: category.name
         self.fields["sort_order"].label = "Display order"
         self.fields["is_active"].label = "Available"
@@ -482,6 +483,7 @@ class ModifierOptionForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if tenant:
             self.fields["dietary_tags"].queryset = DietaryTag.objects.filter(tenant=tenant)
+        self.fields["dietary_tags"].help_text = "Select every label that applies to this option."
         self.fields["price_multiplier"].required = False
         self.fields["price_multiplier"].label = "Base price multiplier (0.50 = half portion)"
         self.fields["is_default"].label = "Selected by default"
