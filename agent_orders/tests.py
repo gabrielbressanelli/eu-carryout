@@ -2,7 +2,7 @@ import json
 
 from django.test import TestCase
 
-from catalog.models import MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
 from tenants.models import Tenant
 
 from .models import AgentAccessToken
@@ -35,6 +35,7 @@ class AgentOrdersApiTests(TestCase):
             name="Extra Marinara",
             price_delta="2.00",
         )
+        self.vegan = DietaryTag.objects.create(tenant=self.tenant, name="Vegan", slug="vegan")
         MenuItemModifierGroup.objects.create(menu_item=self.item, group=self.group)
         AgentAccessToken.objects.create(
             tenant=self.tenant,
@@ -42,6 +43,21 @@ class AgentOrdersApiTests(TestCase):
             token="test-agent-token",
         )
         self.auth = {"HTTP_AUTHORIZATION": "Bearer test-agent-token"}
+
+    def test_menu_search_can_filter_by_dietary_tag(self):
+        self.item.dietary_tags.add(self.vegan)
+        response = self.client.get(
+            "/api/one-sixty-main/agent/menu/search?q=calamari&dietary=vegan",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["item"]["dietary_tags"][0]["slug"], "vegan")
+
+        response = self.client.get(
+            "/api/one-sixty-main/agent/menu/search?q=calamari&dietary=vegetarian",
+            **self.auth,
+        )
+        self.assertEqual(response.json()["match_status"], "no_match")
 
     def test_menu_search_requires_agent_token(self):
         response = self.client.get("/api/one-sixty-main/agent/menu/search?q=calamari")

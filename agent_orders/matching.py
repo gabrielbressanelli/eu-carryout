@@ -32,9 +32,16 @@ def _score(query, candidate):
     return max(token_score, ratio_score)
 
 
-def _candidate_pairs(tenant):
+def _tagged_items(tenant, dietary_tags):
+    qs = MenuItem.objects.filter(tenant=tenant, is_active=True)
+    for tag in dietary_tags:
+        qs = qs.filter(dietary_tags__slug=tag)
+    return qs.distinct()
+
+
+def _candidate_pairs(tenant, dietary_tags=None):
     pairs = []
-    items = MenuItem.objects.filter(tenant=tenant, is_active=True).prefetch_related("aliases", "category")
+    items = _tagged_items(tenant, dietary_tags or []).prefetch_related("aliases", "category")
     for item in items:
         pairs.append((item, item.name))
         pairs.append((item, item.description))
@@ -43,19 +50,19 @@ def _candidate_pairs(tenant):
     return pairs
 
 
-def search_menu(query, tenant):
+def search_menu(query, tenant, dietary_tags=None):
     query = _normalize(query)
     if not query:
         return {"match_status": "no_match", "query": query}
 
-    exact = MenuItem.objects.filter(tenant=tenant, is_active=True).filter(
+    exact = _tagged_items(tenant, dietary_tags or []).filter(
         Q(name__iexact=query) | Q(aliases__alias__iexact=query)
     ).distinct()
     if exact.count() == 1:
         return {"match_status": "matched", "item": exact.first(), "confidence": 1}
 
     best_by_item = {}
-    for item, candidate in _candidate_pairs(tenant):
+    for item, candidate in _candidate_pairs(tenant, dietary_tags):
         score = _score(query, candidate)
         if score > best_by_item.get(item.id, (None, 0))[1]:
             best_by_item[item.id] = (item, score)
@@ -83,9 +90,9 @@ def search_menu(query, tenant):
     return {"match_status": "ambiguous", "query": query, "candidates": candidates}
 
 
-def search_menu_by_category(query, tenant):
+def search_menu_by_category(query, tenant, dietary_tags=None):
     query = _normalize(query)
-    qs = MenuItem.objects.filter(tenant=tenant, is_active=True).select_related("category")
+    qs = _tagged_items(tenant, dietary_tags or []).select_related("category")
     if not query:
         return qs.order_by("category__sort_order", "sort_order", "name")
 

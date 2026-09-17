@@ -9,6 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from catalog.models import DietaryTag
 from .models import BusinessHour, IntegrationEvent, Tenant, TenantIntegration
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ def get_request_tenant(request) -> Tenant:
 
 
 def ensure_tenant_onboarding_defaults(tenant):
+    for slug, name in (("gluten_free", "Gluten-free"), ("vegetarian", "Vegetarian"), ("vegan", "Vegan")):
+        DietaryTag.objects.get_or_create(tenant=tenant, slug=slug, defaults={"name": name})
     for day, _label in BusinessHour.DAY_CHOICES:
         BusinessHour.objects.get_or_create(
             tenant=tenant,

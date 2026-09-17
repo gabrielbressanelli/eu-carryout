@@ -20,6 +20,19 @@ class MenuCategory(models.Model):
         return f"{self.tenant} - {self.name}"
 
 
+class DietaryTag(models.Model):
+    tenant = models.ForeignKey("tenants.Tenant", on_delete=models.CASCADE, related_name="dietary_tags")
+    name = models.CharField(max_length=40)
+    slug = models.SlugField(max_length=40)
+
+    class Meta:
+        unique_together = ("tenant", "slug")
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class MenuItem(models.Model):
     image = models.ImageField(upload_to=menu_upload_path, blank=True, max_length=500)
     tenant = models.ForeignKey("tenants.Tenant", on_delete=models.CASCADE, related_name="menu_items")
@@ -28,6 +41,7 @@ class MenuItem(models.Model):
     description = models.TextField(blank=True, default="")
     price = models.DecimalField(max_digits=10, decimal_places=2)
     image_url = models.URLField(max_length=500, blank=True, default="")
+    dietary_tags = models.ManyToManyField(DietaryTag, blank=True, related_name="menu_items")
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -81,6 +95,7 @@ class ModifierOption(models.Model):
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
+    dietary_tags = models.ManyToManyField(DietaryTag, blank=True, related_name="modifier_options")
 
     class Meta:
         unique_together = ("group", "name")

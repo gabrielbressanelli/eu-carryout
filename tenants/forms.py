@@ -7,7 +7,7 @@ from django.forms import modelformset_factory
 from django.utils.text import slugify
 from zoneinfo import available_timezones
 
-from catalog.models import MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
 
 from .access import can_manage_account, manageable_accounts
 from .models import Account, AccountMembership, BusinessHour, Tenant, TenantIntegration, TenantMembership, HoursOverride
@@ -391,12 +391,13 @@ class MenuItemForm(forms.ModelForm):
 
     class Meta:
         model = MenuItem
-        fields = ["category", "name", "description", "price", "image", "sort_order", "is_active"]
+        fields = ["category", "name", "description", "price", "image", "dietary_tags", "sort_order", "is_active"]
         widgets = {
             "category": forms.Select(attrs={"class": "form-select"}),
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "price": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "dietary_tags": forms.SelectMultiple(attrs={"class": "form-select", "size": 4}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
@@ -406,6 +407,7 @@ class MenuItemForm(forms.ModelForm):
         self.tenant = tenant
         if tenant:
             self.fields["category"].queryset = MenuCategory.objects.filter(tenant=tenant).order_by("sort_order", "name")
+            self.fields["dietary_tags"].queryset = DietaryTag.objects.filter(tenant=tenant)
         self.fields["category"].label_from_instance = lambda category: category.name
         self.fields["sort_order"].label = "Display order"
         self.fields["is_active"].label = "Available"
@@ -433,6 +435,7 @@ class MenuItemForm(forms.ModelForm):
             item.image_url = ""
         if commit:
             item.save()
+            self.save_m2m()
             self.save_aliases(item)
         return item
 
@@ -475,15 +478,18 @@ class ModifierOptionForm(forms.ModelForm):
         value = self.cleaned_data.get("price_multiplier")
         return value if value is not None else 1
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if tenant:
+            self.fields["dietary_tags"].queryset = DietaryTag.objects.filter(tenant=tenant)
         self.fields["price_multiplier"].required = False
         self.fields["price_multiplier"].label = "Base price multiplier (0.50 = half portion)"
         self.fields["is_default"].label = "Selected by default"
+        self.fields["dietary_tags"].widget.attrs.update({"class": "form-select", "size": 4})
 
     class Meta:
         model = ModifierOption
-        fields = ["name", "price_delta", "price_multiplier", "is_default", "sort_order", "is_active"]
+        fields = ["name", "price_delta", "price_multiplier", "is_default", "dietary_tags", "sort_order", "is_active"]
         labels = {"price_delta": "Price adjustment", "sort_order": "Display order", "is_active": "Available"}
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Extra cheese"}),
@@ -532,7 +538,7 @@ class ModifierOptionEditorForm(ModifierOptionForm):
         widgets = {**ModifierOptionForm.Meta.widgets, "group": forms.Select(attrs={"class": "form-select"})}
 
     def __init__(self, *args, tenant=None, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, tenant=tenant, **kwargs)
         self.fields["group"].queryset = ModifierGroup.objects.filter(tenant=tenant)
 
 

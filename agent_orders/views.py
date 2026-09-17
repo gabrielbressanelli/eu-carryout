@@ -48,8 +48,22 @@ def _cleanup_stale_carts(tenant):
     AgentCallCart.objects.filter(tenant=tenant, updated_at__lt=cutoff).delete()
 
 
-def _modifier_group_payload(menu_group):
+def _dietary_filter(request):
+    raw = request.GET.get("dietary", "")
+    return [value.strip().lower().replace("-", "_") for value in raw.split(",") if value.strip()]
+
+
+def _tag_payload(tags):
+    return [{"name": tag.name, "slug": tag.slug} for tag in tags]
+
+
+def _modifier_group_payload(menu_group, dietary_tags=None):
     group = menu_group.group
+    options = group.options.filter(is_active=True).prefetch_related("dietary_tags").order_by("sort_order", "name")
+    if dietary_tags:
+        for tag in dietary_tags:
+            options = options.filter(dietary_tags__slug=tag)
+        options = options.distinct()
     return {
         "id": group.id,
         "name": group.name,
@@ -65,38 +79,40 @@ def _modifier_group_payload(menu_group):
                 "price_multiplier": str(option.price_multiplier),
                 "effective_price_adjustment": str(effective_option_delta(menu_group.menu_item, option)),
                 "is_default": option.is_default,
+                "dietary_tags": _tag_payload(option.dietary_tags.all()),
             }
-            for option in group.options.filter(is_active=True).order_by("sort_order", "name")
+            for option in options
         ],
     }
 
 
-def _item_payload(item):
+def _item_payload(item, dietary_tags=None):
     groups = (
         item.modifier_groups
         .select_related("group")
         .prefetch_related("group__options")
         .order_by("sort_order")
     )
-    modifier_payloads = [_modifier_group_payload(group) for group in groups]
+    modifier_payloads = [_modifier_group_payload(group, dietary_tags) for group in groups]
     return {
         "id": item.id,
         "name": item.name,
         "category": item.category.name,
         "base_price": str(item.price),
         "description": item.description,
+        "dietary_tags": _tag_payload(item.dietary_tags.all()),
         "aliases": [alias.alias for alias in item.aliases.all()],
         "required_modifiers": [payload for payload in modifier_payloads if payload["required"]],
         "optional_modifiers": [payload for payload in modifier_payloads if not payload["required"]],
     }
 
 
-def _search_result_payload(query, result):
+def _search_result_payload(query, result, dietary_tags=None):
     if result["match_status"] == "matched":
         return {
             "match_status": "matched",
             "confidence": result.get("confidence"),
-            "item": _item_payload(result["item"]),
+            "item": _item_payload(result["item"], dietary_tags),
         }
     if result["match_status"] == "ambiguous":
         return {
@@ -158,15 +174,16 @@ def menu_search(request, tenant_slug):
         return auth_error
 
     raw_query = request.GET.get("q", "")
+    dietary_tags = _dietary_filter(request)
     phrases = [phrase.strip() for phrase in raw_query.split(",") if phrase.strip()]
     if len(phrases) <= 1:
         query = phrases[0] if phrases else raw_query
-        return JsonResponse(_search_result_payload(query, search_menu(query, tenant)))
+        return JsonResponse(_search_result_payload(query, search_menu(query, tenant, dietary_tags), dietary_tags))
 
     return JsonResponse({
         "query": raw_query,
         "results": [
-            {"query": phrase, **_search_result_payload(phrase, search_menu(phrase, tenant))}
+            {"query": phrase, **_search_result_payload(phrase, search_menu(phrase, tenant, dietary_tags), dietary_tags)}
             for phrase in phrases
         ],
     })
@@ -180,10 +197,11 @@ def menu_categories(request, tenant_slug):
         return auth_error
 
     query = request.GET.get("q", "")
-    items = search_menu_by_category(query, tenant)
+    dietary_tags = _dietary_filter(request)
+    items = search_menu_by_category(query, tenant, dietary_tags)
     return JsonResponse({
         "query": query,
-        "items": [_item_payload(item) for item in items],
+        "items": [_item_payload(item, dietary_tags) for item in items],
     })
 
 
@@ -198,7 +216,7 @@ def menu_item_detail(request, tenant_slug, item_id):
         item = MenuItem.objects.get(id=item_id, tenant=tenant, is_active=True)
     except MenuItem.DoesNotExist:
         return JsonResponse({"error": "Menu item not found"}, status=404)
-    return JsonResponse({"item": _item_payload(item)})
+    return JsonResponse({"item": _item_payload(item, _dietary_filter(request))})
 
 
 @csrf_exempt
