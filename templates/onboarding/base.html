@@ -11,8 +11,7 @@
   <nav class="onboarding-nav" aria-label="Account">
     <div class="workspace-width nav-inner">
       <a class="onboarding-brand" href="{% if login_page %}#{% else %}{% url 'onboarding:restaurant_list' %}{% endif %}">
-        {% if tenant.logo_src %}<img src="{{ tenant.logo_src }}" alt="" class="brand-logo">{% else %}<i data-lucide="utensils" aria-hidden="true"></i>{% endif %}
-        <span>{% if tenant %}{{ tenant.name }}{% else %}Carryout{% endif %}</span>
+        {% if tenant.logo_src %}<img src="{{ tenant.logo_src }}" alt="{{ tenant.name }}" class="brand-logo">{% elif tenant %}<span>{{ tenant.name }}</span>{% else %}<span>Carryout</span>{% endif %}
       </a>
       {% if user.is_authenticated and not login_page %}
       <div class="nav-actions">

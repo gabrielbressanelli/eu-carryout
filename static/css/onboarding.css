@@ -91,6 +91,11 @@ h3 { font-size:17px; font-weight:700; margin:0; }
 .operations-tabs { display:flex; gap:8px; border-bottom:1px solid var(--line); margin-bottom:24px; }
 .operations-tabs a { padding:11px 14px; color:var(--muted); text-decoration:none; border-bottom:3px solid transparent; font-weight:600; }
 .operations-tabs a:hover,.operations-tabs a.is-current { color:var(--accent-ink); border-color:var(--accent); }
+.operations-filter { display:flex; align-items:center; gap:12px; margin-bottom:24px; color:var(--muted); }
+.operations-filter label { font-weight:600; white-space:nowrap; }
+.operations-filter .form-select { width:180px; min-height:40px; }
+.operations-filter .form-control { width:170px; min-height:40px; }
+.operations-filter .is-hidden { display:none; }
 .operations-list { max-width:920px; }
 .operation-order { border:1px solid var(--line); border-radius:6px; padding:22px; margin-bottom:16px; background:#fff; }
 .operation-order-head,.operation-order-meta,.operation-actions { display:flex; align-items:center; justify-content:space-between; gap:16px; }
@@ -173,4 +178,6 @@ h3 { font-size:17px; font-weight:700; margin:0; }
   .operation-order-head,.operation-order-meta,.operation-actions { align-items:flex-start; flex-direction:column; }
   .operation-badges { justify-content:flex-start; }
   .operation-actions,.operation-actions .form-select,.operation-actions .btn { width:100%; }
+  .operations-filter { align-items:stretch; flex-wrap:wrap; }
+  .operations-filter .form-select,.operations-filter .form-control { flex:1 1 180px; width:auto; }
 }

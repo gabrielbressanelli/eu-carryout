@@ -7,9 +7,18 @@
   <a class="btn btn-outline-dark" href="{% url 'menu' tenant.slug %}" target="_blank" rel="noopener"><i data-lucide="external-link"></i> Ordering site</a>
 </header>
 <div class="operations-tabs" aria-label="Order views">
-  <a href="{% url 'order_operations' tenant.slug %}?view=current" {% if view == 'current' %}class="is-current"{% endif %}>Current orders</a>
-  <a href="{% url 'order_operations' tenant.slug %}?view=history" {% if view == 'history' %}class="is-current"{% endif %}>Order history</a>
+  <a href="{% url 'order_operations' tenant.slug %}?view=current&period={{ period }}{% if selected_date %}&date={{ selected_date }}{% endif %}" {% if view == 'current' %}class="is-current"{% endif %}>Current orders</a>
+  <a href="{% url 'order_operations' tenant.slug %}?view=history&period={{ period }}{% if selected_date %}&date={{ selected_date }}{% endif %}" {% if view == 'history' %}class="is-current"{% endif %}>Order history</a>
 </div>
+<form method="get" class="operations-filter">
+  <input type="hidden" name="view" value="{{ view }}">
+  <label for="order-period">Show orders</label>
+  <select id="order-period" name="period" class="form-select" onchange="this.form.submit()">
+    {% for value, label in period_choices %}<option value="{{ value }}" {% if period == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <label class="specific-date{% if period != 'date' %} is-hidden{% endif %}" for="order-date">Date</label>
+  <input id="order-date" class="form-control specific-date{% if period != 'date' %} is-hidden{% endif %}" type="date" name="date" value="{{ selected_date }}" onchange="this.form.submit()">
+</form>
 <section class="operations-list">
   {% for row in orders %}
     <article class="operation-order">
@@ -22,7 +31,7 @@
         {% for item in row.order.items.all %}<div class="operation-item"><span>{{ item.quantity }}x {{ item.name_snapshot }}</span><strong>${{ item.line_total }}</strong>{% for option in item.options_snapshot %}<small>{{ option.group }}: {{ option.name }}</small>{% endfor %}{% if item.note %}<small>Note: {{ item.note }}</small>{% endif %}</div>{% empty %}<p class="text-muted">No item details recorded.</p>{% endfor %}
       </div>
       <form method="post" class="operation-actions">
-        {% csrf_token %}<input type="hidden" name="order_id" value="{{ row.order.id }}"><input type="hidden" name="view" value="{{ view }}">
+        {% csrf_token %}<input type="hidden" name="order_id" value="{{ row.order.id }}"><input type="hidden" name="view" value="{{ view }}"><input type="hidden" name="period" value="{{ period }}"><input type="hidden" name="date" value="{{ selected_date }}">
         <label class="visually-hidden" for="order-status-{{ row.order.id }}">Update order status</label>
         <select id="order-status-{{ row.order.id }}" name="fulfillment_status" class="form-select">
           {% for value, label in fulfillment_choices %}<option value="{{ value }}" {% if row.order.fulfillment_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
