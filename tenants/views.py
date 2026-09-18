@@ -49,6 +49,8 @@ def _context(tenant, section):
 
 
 def restaurant_login(request, tenant_slug=None):
+    if request.user.is_authenticated:
+        return redirect("onboarding:restaurant_list")
     tenant = get_object_or_404(Tenant, slug=tenant_slug) if tenant_slug else None
     form = RestaurantLoginForm(request, data=request.POST or None, tenant=tenant)
     if request.method == "POST" and form.is_valid():

@@ -29,21 +29,37 @@ ENVIRONMENT = os.environ.get('ENVIRONMENT', 'production')
 
 DEBUG = ENVIRONMENT == 'local'
 
+def _env_list(name, fallback):
+    values = [value.strip() for value in os.environ.get(name, "").split(",") if value.strip()]
+    return values or fallback
+
+
 if ENVIRONMENT == 'production':
-    ALLOWED_HOSTS = [    
-    "carryout-production.up.railway.app",
-    "carryout.online",
-    "www.carryout.online",] # stil to be set
+    ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", [
+        "carryout-production.up.railway.app",
+        "carryout.online",
+        "www.carryout.online",
+    ])
+    _csrf_origins = _env_list("CSRF_TRUSTED_ORIGINS", [
+        "https://carryout-production.up.railway.app",
+        "https://carryout.online",
+        "https://www.carryout.online",
+    ])
 else:
-    ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".localhost", "testserver"]
+    ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", ["127.0.0.1", "localhost", ".localhost", "testserver"])
+    _csrf_origins = _env_list("CSRF_TRUSTED_ORIGINS", ["http://127.0.0.1", "http://localhost", "http://testserver"])
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://carryout-production.up.railway.app",
-    "https://carryout.online",
-    "https://www.carryout.online",
-    "https://127.0.0.1", 
-    "https://localhost", 
+    origin if "://" in origin else f"https://{origin}"
+    for origin in _csrf_origins
 ]
+
+# Railway and other reverse proxies terminate TLS before forwarding requests to Django.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # Application definition
 

@@ -85,6 +85,8 @@ class OnboardingFlowTests(TestCase):
         }
 
     def test_simple_and_branded_login(self):
+        self.assertRedirects(self.client.get(reverse("onboarding:login")), reverse("onboarding:restaurant_list"))
+        self.assertRedirects(self.client.get(reverse("onboarding:restaurant_login", args=[self.tenant.slug])), reverse("onboarding:restaurant_list"))
         self.client.logout()
         response = self.client.get(self.manage_url())
         self.assertIn("/onboarding/blue-plate/login/", response["Location"])
