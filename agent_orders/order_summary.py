@@ -50,11 +50,11 @@ def _match_option(menu_item, value):
         group__tenant=menu_item.tenant,
         group__menuitemmodifiergroup__menu_item=menu_item,
         is_active=True,
-    )
+    ).prefetch_related("aliases")
     best_option = None
     best_score = 0
     for option in options:
-        score = _score(value, option.name)
+        score = max([_score(value, option.name), *(_score(value, alias.alias) for alias in option.aliases.all())])
         if score > best_score:
             best_option = option
             best_score = score

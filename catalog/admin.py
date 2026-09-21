@@ -1,10 +1,15 @@
 from django.contrib import admin
 
-from .models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from .models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
 
 
 class ModifierOptionInline(admin.TabularInline):
     model = ModifierOption
+    extra = 1
+
+
+class ModifierOptionAliasInline(admin.TabularInline):
+    model = ModifierOptionAlias
     extra = 1
 
 
@@ -55,7 +60,9 @@ class ModifierOptionAdmin(admin.ModelAdmin):
     list_display = ("name", "group", "price_delta", "price_multiplier", "is_default", "is_active")
     list_filter = ("group__tenant", "group", "is_active")
     search_fields = ("name", "group__name")
+    inlines = [ModifierOptionAliasInline]
 
 
 admin.site.register(MenuItemModifierGroup)
 admin.site.register(MenuItemAlias)
+admin.site.register(ModifierOptionAlias)

@@ -2,7 +2,7 @@ import json
 
 from django.test import TestCase
 
-from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
 from tenants.models import Tenant
 
 from .models import AgentAccessToken
@@ -35,6 +35,7 @@ class AgentOrdersApiTests(TestCase):
             name="Extra Marinara",
             price_delta="2.00",
         )
+        ModifierOptionAlias.objects.create(modifier_option=self.option, alias="marinara")
         self.vegan = DietaryTag.objects.create(tenant=self.tenant, name="Vegan", slug="vegan")
         MenuItemModifierGroup.objects.create(menu_item=self.item, group=self.group)
         AgentAccessToken.objects.create(
@@ -74,6 +75,17 @@ class AgentOrdersApiTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["match_status"], "matched")
         self.assertEqual(payload["item"]["name"], "Calamari")
+
+    def test_order_summary_matches_modifier_alias(self):
+        response = self.client.post(
+            "/api/one-sixty-main/agent/order-summary/total",
+            data=json.dumps({"order_summary": "1x Calamari; - Marinara;"}),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["warnings"], [])
+        self.assertEqual(response.json()["exact_total"], "18.00")
 
     def test_cart_lifecycle_prices_modifiers(self):
         response = self.client.post(

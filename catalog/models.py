@@ -105,6 +105,18 @@ class ModifierOption(models.Model):
         return self.name
 
 
+class ModifierOptionAlias(models.Model):
+    modifier_option = models.ForeignKey(ModifierOption, on_delete=models.CASCADE, related_name="aliases")
+    alias = models.CharField(max_length=80)
+
+    class Meta:
+        unique_together = ("modifier_option", "alias")
+        ordering = ["alias"]
+
+    def __str__(self):
+        return f"{self.alias} -> {self.modifier_option}"
+
+
 class MenuItemModifierGroup(models.Model):
     menu_item = models.ForeignKey(MenuItem, on_delete=models.CASCADE, related_name="modifier_groups")
     group = models.ForeignKey(ModifierGroup, on_delete=models.CASCADE)

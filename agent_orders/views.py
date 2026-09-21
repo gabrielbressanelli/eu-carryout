@@ -80,6 +80,7 @@ def _modifier_group_payload(menu_group, dietary_tags=None):
                 "effective_price_adjustment": str(effective_option_delta(menu_group.menu_item, option)),
                 "is_default": option.is_default,
                 "dietary_tags": _tag_payload(option.dietary_tags.all()),
+                "aliases": [alias.alias for alias in option.aliases.all()],
             }
             for option in options
         ],

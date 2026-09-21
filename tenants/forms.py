@@ -7,7 +7,7 @@ from django.forms import modelformset_factory
 from django.utils.text import slugify
 from zoneinfo import available_timezones
 
-from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
 
 from .access import can_manage_account, manageable_accounts
 from .models import Account, AccountMembership, BusinessHour, Tenant, TenantIntegration, TenantMembership, HoursOverride
@@ -475,6 +475,12 @@ class ModifierGroupForm(forms.ModelForm):
 
 
 class ModifierOptionForm(forms.ModelForm):
+    alias_text = forms.CharField(
+        required=False,
+        label="Voice/search aliases",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "marinara, red sauce, tomato sauce"}),
+    )
+
     def clean_price_multiplier(self):
         value = self.cleaned_data.get("price_multiplier")
         return value if value is not None else 1
@@ -488,6 +494,8 @@ class ModifierOptionForm(forms.ModelForm):
         self.fields["price_multiplier"].label = "Base price multiplier (0.50 = half portion)"
         self.fields["is_default"].label = "Selected by default"
         self.fields["dietary_tags"].widget.attrs.update({"class": "dietary-input"})
+        if self.instance.pk:
+            self.fields["alias_text"].initial = ", ".join(self.instance.aliases.values_list("alias", flat=True))
 
     class Meta:
         model = ModifierOption
@@ -502,6 +510,24 @@ class ModifierOptionForm(forms.ModelForm):
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def clean_alias_text(self):
+        value = self.cleaned_data["alias_text"]
+        if any(len(alias.strip()) > 80 for alias in value.split(",")):
+            raise forms.ValidationError("Each alias must be 80 characters or fewer.")
+        return value
+
+    def save(self, commit=True):
+        option = super().save(commit=commit)
+        if commit:
+            self.save_aliases(option)
+        return option
+
+    def save_aliases(self, option):
+        aliases = [value.strip() for value in self.cleaned_data.get("alias_text", "").split(",") if value.strip()]
+        option.aliases.exclude(alias__in=aliases).delete()
+        for alias in aliases:
+            ModifierOptionAlias.objects.get_or_create(modifier_option=option, alias=alias)
 
 
 class OrderingSettingsForm(forms.ModelForm):
