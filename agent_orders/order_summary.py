@@ -33,12 +33,22 @@ def _split_chunks(summary):
     return chunks
 
 
-def _match_item(name, tenant):
+def _match_item(name, tenant, modifier_values=None):
     best_item = None
     best_score = 0
-    for item in MenuItem.objects.filter(tenant=tenant, is_active=True).prefetch_related("aliases"):
+    for item in MenuItem.objects.filter(tenant=tenant, is_active=True).prefetch_related(
+        "aliases", "modifier_groups__group__options__aliases"
+    ):
         candidates = [item.name, item.description] + [alias.alias for alias in item.aliases.all()]
         score = max(_score(name, candidate) for candidate in candidates)
+        for modifier_value in modifier_values or []:
+            modifier_scores = []
+            for link in item.modifier_groups.all():
+                for option in link.group.options.all():
+                    option_candidates = [option.name] + [alias.alias for alias in option.aliases.all()]
+                    modifier_scores.append(max(_score(modifier_value, candidate) for candidate in option_candidates))
+            if modifier_scores and max(modifier_scores) >= MIN_OPTION_SCORE:
+                score += 0.10
         if score > best_score:
             best_item = item
             best_score = score
@@ -75,7 +85,7 @@ def compute_total_from_summary(order_summary, tenant):
             warnings.append("Found a quantity with no item name.")
             continue
 
-        item = _match_item(segments[0], tenant)
+        item = _match_item(segments[0], tenant, segments[1:])
         if not item:
             warnings.append(f"Could not match item: {segments[0]!r}")
             continue
@@ -101,7 +111,7 @@ def resolve_order_summary(order_summary, tenant):
         if not segments:
             warnings.append("Found a quantity with no item name.")
             continue
-        item = _match_item(segments[0], tenant)
+        item = _match_item(segments[0], tenant, segments[1:])
         if not item:
             warnings.append(f"Could not match item: {segments[0]!r}")
             continue

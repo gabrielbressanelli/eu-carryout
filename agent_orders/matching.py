@@ -39,15 +39,21 @@ def _tagged_items(tenant, dietary_tags):
     return qs.distinct()
 
 
-def _candidate_pairs(tenant, dietary_tags=None):
-    pairs = []
-    items = _tagged_items(tenant, dietary_tags or []).prefetch_related("aliases", "category")
-    for item in items:
-        pairs.append((item, item.name))
-        pairs.append((item, item.description))
-        for alias in item.aliases.all():
-            pairs.append((item, alias.alias))
-    return pairs
+def _item_score(query, item):
+    candidates = [item.name, item.description] + [alias.alias for alias in item.aliases.all()]
+    base_score = max(_score(query, candidate) for candidate in candidates)
+    option_scores = []
+    for link in item.modifier_groups.all():
+        for option in link.group.options.all():
+            option_candidates = [option.name] + [alias.alias for alias in option.aliases.all()]
+            option_scores.append(max(_score(query, candidate) for candidate in option_candidates))
+
+    strong_options = [score for score in option_scores if score >= AMBIGUOUS_SCORE_MIN]
+    if len(strong_options) >= 2:
+        base_score = max(base_score, min(1, max(strong_options) + 0.14 * min(len(strong_options) - 1, 3)))
+    elif strong_options:
+        base_score = max(base_score, min(0.78, max(strong_options)))
+    return base_score
 
 
 def search_menu(query, tenant, dietary_tags=None):
@@ -62,10 +68,11 @@ def search_menu(query, tenant, dietary_tags=None):
         return {"match_status": "matched", "item": exact.first(), "confidence": 1}
 
     best_by_item = {}
-    for item, candidate in _candidate_pairs(tenant, dietary_tags):
-        score = _score(query, candidate)
-        if score > best_by_item.get(item.id, (None, 0))[1]:
-            best_by_item[item.id] = (item, score)
+    items = _tagged_items(tenant, dietary_tags or []).prefetch_related(
+        "aliases", "category", "modifier_groups__group__options__aliases"
+    )
+    for item in items:
+        best_by_item[item.id] = (item, _item_score(query, item))
 
     ranked = sorted(best_by_item.values(), key=lambda row: row[1], reverse=True)
     if not ranked or ranked[0][1] < AMBIGUOUS_SCORE_MIN:

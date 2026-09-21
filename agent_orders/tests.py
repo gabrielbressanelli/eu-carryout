@@ -76,6 +76,29 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(payload["match_status"], "matched")
         self.assertEqual(payload["item"]["name"], "Calamari")
 
+    def test_menu_search_surfaces_build_item_from_modifier_terms(self):
+        build_item = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Build Your Own Pasta",
+            price="12.00",
+        )
+        pasta_group = ModifierGroup.objects.create(tenant=self.tenant, name="Pasta type")
+        sauce_group = ModifierGroup.objects.create(tenant=self.tenant, name="Build sauce")
+        penne = ModifierOption.objects.create(group=pasta_group, name="Penne")
+        marinara = ModifierOption.objects.create(group=sauce_group, name="Tomato Basil Sauce")
+        ModifierOptionAlias.objects.create(modifier_option=marinara, alias="marinara sauce")
+        MenuItemModifierGroup.objects.create(menu_item=build_item, group=pasta_group)
+        MenuItemModifierGroup.objects.create(menu_item=build_item, group=sauce_group)
+
+        response = self.client.get(
+            "/api/one-sixty-main/agent/menu/search?q=penne+marinara+sauce",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["match_status"], "matched")
+        self.assertEqual(response.json()["item"]["name"], "Build Your Own Pasta")
+
     def test_order_summary_matches_modifier_alias(self):
         response = self.client.post(
             "/api/one-sixty-main/agent/order-summary/total",
