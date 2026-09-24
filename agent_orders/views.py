@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import uuid4
@@ -26,6 +27,7 @@ from .matching import search_menu, search_menu_by_category
 from .models import AgentCallCart, AgentCallCartItem
 from .order_summary import compute_total_from_summary
 from .order_summary import resolve_order_summary
+
 
 STALE_CART_MAX_AGE = timedelta(hours=4)
 log = logging.getLogger(__name__)
@@ -562,3 +564,40 @@ def order_finalize(request, tenant_slug):
         "order_summary": order.order_summary,
         "payment_url": session.url,
     }, status=201)
+
+@csrf_exempt
+@require_http_methods(['POST'])
+async def agent_pause_n_seconds(request, tenant_slug):
+    try:
+        body = json.loads(request.body)
+
+        seconds = float(body.get("seconds", 2))
+        if seconds < 10:
+
+            await asyncio.sleep(seconds)
+
+            return JsonResponse(
+                {
+                    "ok": True,
+
+                },
+                status=200,
+            )
+        else:
+            return JsonResponse(
+                {
+                    'ok': False,
+                    "message": "seconds must be lower than 10",
+                },
+                status=400
+            )
+        
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse(
+            {
+                'ok': False,
+                'message': "Invalid Body value for seconds",
+            },
+            status=400,
+        )
+

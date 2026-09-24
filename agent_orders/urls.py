@@ -15,4 +15,5 @@ urlpatterns = [
     path("orders/finalize-summary", views.order_finalize_summary, name="order_finalize_summary"),
     path("orders/finalize", views.order_finalize, name="order_finalize"),
     path("checkout/<str:token>/", views.agent_checkout, name="agent_checkout"),
+    path("agent-wait/", views.agent_pause_n_seconds, name="agent_pause")
 ]
