@@ -411,16 +411,13 @@ def order_finalize_summary(request, tenant_slug):
 
     resolved, warnings = resolve_order_summary(payload["order_summary"], tenant)
     cart = _save_resolved_agent_cart(tenant, session_id, resolved)
-    checkout_url = request.build_absolute_uri(f"/api/{tenant.slug}/agent/checkout/{_agent_checkout_token(tenant, session_id)}/") if resolved else None
-    if warnings:
+    if not resolved:
         return JsonResponse({
             "success": False,
             "requires_review": True,
-            "checkout_url": checkout_url,
-            "resolved_summary": " ".join(
-                f"{line['quantity']}x {line['item'].name};" for line in resolved
-            ),
-            "unresolved": warnings,
+            "checkout_url": None,
+            "resolved_summary": "",
+            "warnings": warnings,
         }, status=422)
 
     request._body = json.dumps({
@@ -430,7 +427,12 @@ def order_finalize_summary(request, tenant_slug):
         "customer_email": payload.get("customer_email", ""),
         "customer_phone": payload.get("customer_phone", ""),
     }).encode("utf-8")
-    return order_finalize(request, tenant_slug)
+    response = order_finalize(request, tenant_slug)
+    if response.headers.get("Content-Type", "").startswith("application/json"):
+        response_payload = json.loads(response.content)
+        response_payload["warnings"] = warnings
+        response = JsonResponse(response_payload, status=response.status_code)
+    return response
 
 
 @require_GET
@@ -600,4 +602,3 @@ async def agent_pause_n_seconds(request, tenant_slug):
             },
             status=400,
         )
-

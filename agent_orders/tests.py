@@ -1,8 +1,12 @@
 import json
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
+from ordering.models import Order
 from tenants.models import Tenant
 
 from .models import AgentAccessToken
@@ -191,3 +195,55 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["exact_total"], "42.00")
         self.assertEqual(response.json()["warnings"], [])
+
+    @override_settings(STRIPE_SECRET_KEY="test-key")
+    def test_finalize_summary_charges_resolved_lines_and_returns_warnings(self):
+        self.tenant.account.stripe_account_id = "acct_test"
+        self.tenant.account.save()
+        stripe = SimpleNamespace(
+            checkout=SimpleNamespace(
+                Session=SimpleNamespace(
+                    create=lambda **kwargs: SimpleNamespace(
+                        id="cs_test_agent",
+                        url="https://checkout.stripe.test/agent",
+                    )
+                )
+            )
+        )
+        with patch.dict("sys.modules", {"stripe": stripe}), patch(
+            "agent_orders.views.OrderingHours.validate_pickup",
+            return_value=timezone.now(),
+        ):
+            response = self.client.post(
+                "/api/one-sixty-main/agent/orders/finalize-summary",
+                data=json.dumps({
+                    "session_id": "call-finalize",
+                    "order_summary": "1x Calamari; - Unknown Sauce; 1x Missing Dish;",
+                }),
+                content_type="application/json",
+                **self.auth,
+            )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["amount"], "16.00")
+        self.assertEqual(payload["payment_url"], "https://checkout.stripe.test/agent")
+        self.assertEqual(len(payload["warnings"]), 2)
+        self.assertIn("Unknown Sauce", " ".join(payload["warnings"]))
+        self.assertIn("Missing Dish", " ".join(payload["warnings"]))
+        self.assertEqual(str(Order.objects.get().amount_paid), "16.00")
+
+    def test_finalize_summary_with_no_resolved_lines_returns_warnings_without_order(self):
+        response = self.client.post(
+            "/api/one-sixty-main/agent/orders/finalize-summary",
+            data=json.dumps({
+                "session_id": "call-empty",
+                "order_summary": "1x Missing Dish;",
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["warnings"], ["Could not price item: 'Missing Dish'"])
+        self.assertFalse(Order.objects.exists())

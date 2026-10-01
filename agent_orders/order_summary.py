@@ -82,22 +82,24 @@ def compute_total_from_summary(order_summary, tenant):
     for quantity, chunk in chunks:
         segments = [segment.strip().lstrip("-").strip() for segment in chunk.split(";") if segment.strip()]
         if not segments:
-            warnings.append("Found a quantity with no item name.")
+            warnings.append("Found a quantity with no item name attached.")
             continue
 
         item = _match_item(segments[0], tenant, segments[1:])
         if not item:
-            warnings.append(f"Could not match item: {segments[0]!r}")
+            warnings.append(f"Could not price item: {segments[0]!r}")
             continue
 
-        unit_price = item.price
+        multiplier = Decimal("1.00")
+        addons = Decimal("0.00")
         for modifier_text in segments[1:]:
             option = _match_option(item, modifier_text)
             if not option:
-                warnings.append(f"Could not match modifier {modifier_text!r} for item {item.name!r}")
+                warnings.append(f"Could not price modifier {modifier_text!r} for item {item.name!r}")
                 continue
-            unit_price += option.price_delta
-        total += unit_price * quantity
+            multiplier *= option.price_multiplier
+            addons += option.price_delta
+        total += (item.price * multiplier + addons) * quantity
 
     return total.quantize(Decimal("0.01")), warnings
 
@@ -109,22 +111,19 @@ def resolve_order_summary(order_summary, tenant):
     for quantity, chunk in _split_chunks(order_summary):
         segments = [segment.strip().lstrip("-").strip() for segment in chunk.split(";") if segment.strip()]
         if not segments:
-            warnings.append("Found a quantity with no item name.")
+            warnings.append("Found a quantity with no item name attached.")
             continue
         item = _match_item(segments[0], tenant, segments[1:])
         if not item:
-            warnings.append(f"Could not match item: {segments[0]!r}")
+            warnings.append(f"Could not price item: {segments[0]!r}")
             continue
         options = []
         for modifier_text in segments[1:]:
             option = _match_option(item, modifier_text)
             if not option:
-                warnings.append(f"Could not match modifier {modifier_text!r} for item {item.name!r}")
-                options = []
-                break
+                warnings.append(f"Could not price modifier {modifier_text!r} for item {item.name!r}")
+                continue
             options.append(option)
-        if warnings and warnings[-1].startswith("Could not match modifier") and not options and len(segments) > 1:
-            continue
         try:
             unit_price, options_snapshot = validate_and_price(item, [option.id for option in options])
         except ValueError as exc:
