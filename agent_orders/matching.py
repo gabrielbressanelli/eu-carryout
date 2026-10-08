@@ -3,6 +3,7 @@ from difflib import SequenceMatcher
 from django.db.models import Q
 
 from catalog.models import MenuCategory, MenuItem
+from catalog.pricing import modifier_assignments
 
 MATCH_SCORE_MIN = 0.82
 AMBIGUOUS_SCORE_MIN = 0.62
@@ -43,7 +44,7 @@ def _item_score(query, item):
     candidates = [item.name, item.description] + [alias.alias for alias in item.aliases.all()]
     base_score = max(_score(query, candidate) for candidate in candidates)
     option_scores = []
-    for link in item.modifier_groups.all():
+    for link in modifier_assignments(item):
         for option in link.group.options.all():
             option_candidates = [option.name] + [alias.alias for alias in option.aliases.all()]
             option_scores.append(max(_score(query, candidate) for candidate in option_candidates))
@@ -69,7 +70,8 @@ def search_menu(query, tenant, dietary_tags=None):
 
     best_by_item = {}
     items = _tagged_items(tenant, dietary_tags or []).prefetch_related(
-        "aliases", "category", "modifier_groups__group__options__aliases"
+        "aliases", "category", "modifier_groups__group__options__aliases",
+        "category__modifier_groups__group__options__aliases",
     )
     for item in items:
         best_by_item[item.id] = (item, _item_score(query, item))

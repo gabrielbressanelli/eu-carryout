@@ -15,7 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
 from catalog.models import MenuItem
-from catalog.pricing import validate_and_price, effective_option_delta
+from catalog.pricing import effective_option_delta, modifier_assignments, validate_and_price
 from tenants.hours import OrderingHours
 from tenants.services import get_tenant_by_slug, run_enabled_integrations
 
@@ -59,7 +59,7 @@ def _tag_payload(tags):
     return [{"name": tag.name, "slug": tag.slug} for tag in tags]
 
 
-def _modifier_group_payload(menu_group, dietary_tags=None):
+def _modifier_group_payload(menu_item, menu_group, dietary_tags=None):
     group = menu_group.group
     options = group.options.filter(is_active=True).prefetch_related("dietary_tags").order_by("sort_order", "name")
     if dietary_tags:
@@ -79,7 +79,7 @@ def _modifier_group_payload(menu_group, dietary_tags=None):
                 "name": option.name,
                 "price_adjustment": str(option.price_delta),
                 "price_multiplier": str(option.price_multiplier),
-                "effective_price_adjustment": str(effective_option_delta(menu_group.menu_item, option)),
+                "effective_price_adjustment": str(effective_option_delta(menu_item, option)),
                 "is_default": option.is_default,
                 "dietary_tags": _tag_payload(option.dietary_tags.all()),
                 "aliases": [alias.alias for alias in option.aliases.all()],
@@ -90,13 +90,8 @@ def _modifier_group_payload(menu_group, dietary_tags=None):
 
 
 def _item_payload(item, dietary_tags=None):
-    groups = (
-        item.modifier_groups
-        .select_related("group")
-        .prefetch_related("group__options")
-        .order_by("sort_order")
-    )
-    modifier_payloads = [_modifier_group_payload(group, dietary_tags) for group in groups]
+    groups = modifier_assignments(item)
+    modifier_payloads = [_modifier_group_payload(item, group, dietary_tags) for group in groups]
     return {
         "id": item.id,
         "name": item.name,

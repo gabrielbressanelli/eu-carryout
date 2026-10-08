@@ -3,7 +3,7 @@ from decimal import Decimal
 from difflib import SequenceMatcher
 
 from catalog.models import MenuItem, ModifierOption
-from catalog.pricing import validate_and_price
+from catalog.pricing import modifier_assignments, validate_and_price
 
 ITEM_BOUNDARY_RE = re.compile(r"(\d+)\s*x\s+", re.IGNORECASE)
 MIN_ITEM_SCORE = 0.74
@@ -37,13 +37,14 @@ def _match_item(name, tenant, modifier_values=None):
     best_item = None
     best_score = 0
     for item in MenuItem.objects.filter(tenant=tenant, is_active=True).prefetch_related(
-        "aliases", "modifier_groups__group__options__aliases"
+        "aliases", "category", "modifier_groups__group__options__aliases",
+        "category__modifier_groups__group__options__aliases",
     ):
         candidates = [item.name, item.description] + [alias.alias for alias in item.aliases.all()]
         score = max(_score(name, candidate) for candidate in candidates)
         for modifier_value in modifier_values or []:
             modifier_scores = []
-            for link in item.modifier_groups.all():
+            for link in modifier_assignments(item):
                 for option in link.group.options.all():
                     option_candidates = [option.name] + [alias.alias for alias in option.aliases.all()]
                     modifier_scores.append(max(_score(modifier_value, candidate) for candidate in option_candidates))
@@ -56,9 +57,10 @@ def _match_item(name, tenant, modifier_values=None):
 
 
 def _match_option(menu_item, value):
+    group_ids = [link.group_id for link in modifier_assignments(menu_item)]
     options = ModifierOption.objects.filter(
         group__tenant=menu_item.tenant,
-        group__menuitemmodifiergroup__menu_item=menu_item,
+        group_id__in=group_ids,
         is_active=True,
     ).prefetch_related("aliases")
     best_option = None

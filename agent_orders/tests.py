@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
+from catalog.models import DietaryTag, MenuCategory, MenuCategoryModifierGroup, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
 from ordering.models import Order
 from tenants.models import Tenant
 
@@ -79,6 +79,41 @@ class AgentOrdersApiTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["match_status"], "matched")
         self.assertEqual(payload["item"]["name"], "Calamari")
+
+    def test_menu_search_includes_required_category_modifiers(self):
+        category_group = ModifierGroup.objects.create(
+            tenant=self.tenant,
+            name="Category sauce",
+            required=True,
+            min_choices=1,
+            max_choices=1,
+        )
+        category_option = ModifierOption.objects.create(
+            group=category_group,
+            name="Roasted garlic sauce",
+            price_delta="1.50",
+        )
+        ModifierOptionAlias.objects.create(modifier_option=category_option, alias="garlic sauce")
+        MenuCategoryModifierGroup.objects.create(category=self.category, group=category_group)
+
+        response = self.client.get(
+            "/api/one-sixty-main/agent/menu/search?q=calamari",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["item"]
+        self.assertEqual([group["name"] for group in payload["required_modifiers"]], ["Category sauce"])
+        self.assertEqual(payload["required_modifiers"][0]["options"][0]["effective_price_adjustment"], "1.50")
+
+        response = self.client.post(
+            "/api/one-sixty-main/agent/order-summary/total",
+            data=json.dumps({"order_summary": "1x Calamari; - Garlic sauce;"}),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["warnings"], [])
+        self.assertEqual(response.json()["exact_total"], "17.50")
 
     def test_menu_search_surfaces_build_item_from_modifier_terms(self):
         build_item = MenuItem.objects.create(
