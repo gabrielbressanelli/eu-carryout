@@ -22,7 +22,12 @@
     </div>
   </nav>
   <main class="workspace-width onboarding-shell">
-    {% if messages %}<div class="message-stack" role="status">{% for message in messages %}<div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% if messages %}<div class="message-stack" role="status" aria-live="polite">{% for message in messages %}<div class="onboarding-alert {% if 'error' in message.tags %}is-error{% elif 'warning' in message.tags %}is-warning{% else %}is-success{% endif %}" data-auto-dismiss="5200" style="--alert-duration:5200ms" role="status">
+      <span class="alert-icon" aria-hidden="true"><i data-lucide="{% if 'error' in message.tags %}circle-alert{% elif 'warning' in message.tags %}triangle-alert{% else %}circle-check{% endif %}"></i></span>
+      <span class="alert-copy">{{ message }}</span>
+      <button type="button" class="alert-dismiss" data-dismiss-message aria-label="Dismiss notification"><i data-lucide="x"></i></button>
+      <span class="alert-progress" aria-hidden="true"></span>
+    </div>{% endfor %}</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>

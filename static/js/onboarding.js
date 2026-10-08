@@ -1,5 +1,20 @@
 (() => {
   window.lucide?.createIcons();
+  document.querySelectorAll("[data-auto-dismiss]").forEach((alert) => {
+    let closed = false;
+    const duration = Math.max(Number(alert.dataset.autoDismiss) || 5200, 1000);
+    alert.style.setProperty("--alert-duration", `${duration}ms`);
+
+    const dismiss = () => {
+      if (closed) return;
+      closed = true;
+      alert.classList.add("is-dismissing");
+      window.setTimeout(() => alert.remove(), 260);
+    };
+
+    alert.querySelector("[data-dismiss-message]")?.addEventListener("click", dismiss);
+    window.setTimeout(dismiss, duration);
+  });
   const currentSection = document.querySelector('.setup-nav [aria-current="page"]');
   if (currentSection && currentSection.parentElement.scrollWidth > currentSection.parentElement.clientWidth) {
     currentSection.parentElement.scrollLeft = currentSection.offsetLeft - currentSection.parentElement.offsetLeft - 12;
