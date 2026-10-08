@@ -3,6 +3,30 @@ from decimal import Decimal, ROUND_HALF_UP
 from .models import MenuItem, ModifierOption
 
 
+def modifier_assignments(menu_item):
+    """Return the modifier assignments effective for an item.
+
+    Category assignments provide defaults for every item in the category.
+    A direct item assignment for the same group is more specific and replaces
+    the category assignment, including its selection overrides.
+    """
+    category_links = (
+        menu_item.category.modifier_groups
+        .select_related("group")
+        .prefetch_related("group__options")
+        .all()
+    )
+    item_links = (
+        menu_item.modifier_groups
+        .select_related("group")
+        .prefetch_related("group__options")
+        .all()
+    )
+    assignments = {link.group_id: link for link in category_links}
+    assignments.update({link.group_id: link for link in item_links})
+    return sorted(assignments.values(), key=lambda link: (link.sort_order, link.group.sort_order, link.group_id))
+
+
 def validate_and_price(menu_item: MenuItem, selected_option_ids: list[int] | None = None):
     if not menu_item.is_active or not menu_item.category.is_active or menu_item.category.tenant_id != menu_item.tenant_id:
         raise ValueError("This menu item is no longer available.")
@@ -14,12 +38,7 @@ def validate_and_price(menu_item: MenuItem, selected_option_ids: list[int] | Non
     if len(selected_option_ids) != len(set(selected_option_ids)):
         raise ValueError("Duplicate modifier option IDs are not allowed")
 
-    menu_groups = list(
-        menu_item.modifier_groups
-        .select_related("group")
-        .prefetch_related("group__options")
-        .order_by("sort_order")
-    )
+    menu_groups = modifier_assignments(menu_item)
     allowed_group_ids = [menu_group.group_id for menu_group in menu_groups]
     selected = list(
         ModifierOption.objects.filter(
@@ -78,7 +97,7 @@ def effective_option_delta(menu_item, option):
 
 def modifier_payload(menu_item):
     groups = []
-    for link in menu_item.modifier_groups.select_related("group").prefetch_related("group__options"):
+    for link in modifier_assignments(menu_item):
         if link.group.tenant_id != menu_item.tenant_id:
             continue
         groups.append({

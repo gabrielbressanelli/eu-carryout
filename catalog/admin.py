@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
+from .models import DietaryTag, MenuCategory, MenuCategoryModifierGroup, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
 
 
 class ModifierOptionInline(admin.TabularInline):
@@ -18,6 +18,11 @@ class MenuItemModifierGroupInline(admin.TabularInline):
     extra = 1
 
 
+class MenuCategoryModifierGroupInline(admin.TabularInline):
+    model = MenuCategoryModifierGroup
+    extra = 1
+
+
 class MenuItemAliasInline(admin.TabularInline):
     model = MenuItemAlias
     extra = 1
@@ -29,6 +34,7 @@ class MenuCategoryAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "is_active")
     search_fields = ("name", "tenant__name")
     prepopulated_fields = {"slug": ("name",)}
+    inlines = [MenuCategoryModifierGroupInline]
 
 
 @admin.register(DietaryTag)
@@ -64,5 +70,6 @@ class ModifierOptionAdmin(admin.ModelAdmin):
 
 
 admin.site.register(MenuItemModifierGroup)
+admin.site.register(MenuCategoryModifierGroup)
 admin.site.register(MenuItemAlias)
 admin.site.register(ModifierOptionAlias)

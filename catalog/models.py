@@ -117,6 +117,31 @@ class ModifierOptionAlias(models.Model):
         return f"{self.alias} -> {self.modifier_option}"
 
 
+class MenuCategoryModifierGroup(models.Model):
+    category = models.ForeignKey(MenuCategory, on_delete=models.CASCADE, related_name="modifier_groups")
+    group = models.ForeignKey(ModifierGroup, on_delete=models.CASCADE)
+    required = models.BooleanField(null=True, blank=True)
+    min_choices = models.PositiveIntegerField(null=True, blank=True)
+    max_choices = models.PositiveIntegerField(null=True, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("category", "group")
+        ordering = ["sort_order", "id"]
+
+    def effective_required(self):
+        return self.required if self.required is not None else self.group.required
+
+    def effective_min(self):
+        return self.min_choices if self.min_choices is not None else self.group.min_choices
+
+    def effective_max(self):
+        return self.max_choices if self.max_choices is not None else self.group.max_choices
+
+    def __str__(self):
+        return f"{self.category} - {self.group}"
+
+
 class MenuItemModifierGroup(models.Model):
     menu_item = models.ForeignKey(MenuItem, on_delete=models.CASCADE, related_name="modifier_groups")
     group = models.ForeignKey(ModifierGroup, on_delete=models.CASCADE)

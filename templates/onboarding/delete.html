@@ -3,8 +3,8 @@
 <section class="editor-surface delete-surface">
   <i data-lucide="trash-2"></i><h2>Delete {{ label }}?</h2>
   <p class="delete-name">{{ object }}</p>
-  {% if kind == 'group' %}<p>This also removes its options and assignments from menu items.</p>
-  {% elif kind == 'link' %}<p>The modifier group and its options will remain available.</p>
+  {% if kind == 'group' %}<p>This also removes its options and assignments from menu items and categories.</p>
+  {% elif kind == 'link' or kind == 'category_link' %}<p>The modifier group and its options will remain available.</p>
   {% elif kind == 'category' %}<p>A category can only be deleted when it contains no menu items.</p>
   {% else %}<p>This action cannot be undone.</p>{% endif %}
   {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}

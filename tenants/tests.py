@@ -11,7 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from catalog.models import MenuCategory, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from catalog.models import MenuCategory, MenuCategoryModifierGroup, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
 from ordering.models import Order, OrderItem
 from .models import Account, AccountMembership, BusinessHour, Tenant, TenantIntegration, TenantMembership
 from .services import ensure_tenant_onboarding_defaults
@@ -436,6 +436,23 @@ class OnboardingFlowTests(TestCase):
         self.assertTrue(response.context["form"].errors)
         response = self.client.post(self.editor_url("group", self.group), {"name": "Sauces", "min_choices": 0, "max_choices": 0, "sort_order": 0})
         self.assertEqual(response.status_code, 302)
+
+    def test_category_assignment_can_be_created_and_prefilled(self):
+        group = ModifierGroup.objects.create(tenant=self.tenant, name="Category sauces", min_choices=1, max_choices=1)
+        response = self.client.get(self.editor_url("category_link") + f"?category={self.category.pk}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["form"].initial["category"], self.category.pk)
+        response = self.client.post(self.editor_url("category_link"), {
+            "category": self.category.pk,
+            "group": group.pk,
+            "required": "unknown",
+            "min_choices": "",
+            "max_choices": "",
+            "sort_order": 0,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(MenuCategoryModifierGroup.objects.filter(category=self.category, group=group).exists())
+        self.assertContains(self.client.get(self.manage_url() + "?section=links"), "Category assignment")
 
     def test_csrf_required_for_mutations(self):
         client = Client(enforce_csrf_checks=True)

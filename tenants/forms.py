@@ -7,7 +7,7 @@ from django.forms import modelformset_factory
 from django.utils.text import slugify
 from zoneinfo import available_timezones
 
-from catalog.models import DietaryTag, MenuCategory, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
+from catalog.models import DietaryTag, MenuCategory, MenuCategoryModifierGroup, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
 
 from .access import can_manage_account, manageable_accounts
 from .models import Account, AccountMembership, BusinessHour, Tenant, TenantIntegration, TenantMembership, HoursOverride
@@ -454,7 +454,8 @@ class ModifierGroupForm(forms.ModelForm):
         if minimum is not None and maximum and minimum > maximum:
             raise forms.ValidationError("Maximum selections must cover the minimum, or be 0 for unlimited.")
         if self.instance.pk and minimum is not None and maximum is not None:
-            for link in self.instance.menuitemmodifiergroup_set.all():
+            links = list(self.instance.menuitemmodifiergroup_set.all()) + list(self.instance.menucategorymodifiergroup_set.all())
+            for link in links:
                 effective_min = minimum if link.min_choices is None else link.min_choices
                 effective_max = maximum if link.max_choices is None else link.max_choices
                 if effective_max and effective_min > effective_max:
@@ -569,6 +570,51 @@ class ModifierOptionEditorForm(ModifierOptionForm):
     def __init__(self, *args, tenant=None, **kwargs):
         super().__init__(*args, tenant=tenant, **kwargs)
         self.fields["group"].queryset = ModifierGroup.objects.filter(tenant=tenant)
+
+
+class MenuCategoryModifierGroupForm(forms.ModelForm):
+    class Meta:
+        model = MenuCategoryModifierGroup
+        fields = ["category", "group", "required", "min_choices", "max_choices", "sort_order"]
+        labels = {"required": "Selection requirement", "min_choices": "Minimum selections", "max_choices": "Maximum selections (0 = unlimited)", "sort_order": "Display order"}
+        widgets = {
+            "category": forms.Select(attrs={"class": "form-select"}),
+            "group": forms.Select(attrs={"class": "form-select"}),
+            "required": forms.NullBooleanSelect(attrs={"class": "form-select"}),
+            "min_choices": forms.NumberInput(attrs={"class": "form-control"}),
+            "max_choices": forms.NumberInput(attrs={"class": "form-control"}),
+            "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
+        }
+
+    def __init__(self, *args, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tenant = tenant
+        self.fields["required"].widget.choices = [("unknown", "Use group setting"), ("true", "Required"), ("false", "Optional")]
+        for name in ("min_choices", "max_choices"):
+            self.fields[name].widget.attrs["placeholder"] = "Use group setting"
+        if tenant:
+            self.fields["category"].queryset = MenuCategory.objects.filter(tenant=tenant).order_by("sort_order", "name")
+            self.fields["group"].queryset = ModifierGroup.objects.filter(tenant=tenant).order_by("sort_order", "name")
+
+    def clean(self):
+        cleaned = super().clean()
+        category = cleaned.get("category")
+        group = cleaned.get("group")
+        if category and group and self.tenant:
+            if category.tenant_id != self.tenant.id or group.tenant_id != self.tenant.id:
+                raise forms.ValidationError("Category and modifier group must belong to this restaurant.")
+            existing = MenuCategoryModifierGroup.objects.filter(category=category, group=group)
+            if self.instance.pk:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise forms.ValidationError("This modifier group is already linked to that category.")
+            minimum = cleaned.get("min_choices")
+            maximum = cleaned.get("max_choices")
+            minimum = group.min_choices if minimum is None else minimum
+            maximum = group.max_choices if maximum is None else maximum
+            if maximum and minimum > maximum:
+                raise forms.ValidationError("Maximum selections must cover the minimum, or be 0 for unlimited.")
+        return cleaned
 
 
 class MenuItemModifierGroupForm(forms.ModelForm):

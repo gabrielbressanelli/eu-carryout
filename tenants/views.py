@@ -12,11 +12,11 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from botocore.exceptions import BotoCoreError, ClientError
 
-from catalog.models import MenuCategory, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from catalog.models import MenuCategory, MenuCategoryModifierGroup, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
 
 from .access import accessible_tenants, can_create_restaurants, can_manage_tenant_access, restaurant_access
 from .forms import (
-    BusinessHourFormSet, MenuCategoryForm, MenuItemForm, MenuItemModifierGroupForm,
+    BusinessHourFormSet, MenuCategoryForm, MenuCategoryModifierGroupForm, MenuItemForm, MenuItemModifierGroupForm,
     ModifierGroupForm, ModifierOptionEditorForm, RestaurantAccessForm,
     RestaurantAccountForm, RestaurantCreateAccessForm, RestaurantLoginForm, TenantIntegrationFormSet, TenantOnboardingForm,
     OrderingSettingsForm, HoursOverrideForm,
@@ -29,13 +29,14 @@ log = logging.getLogger(__name__)
 
 SECTIONS = [("overview", "Business"), ("orders", "Orders"), ("hours", "Business hours"), ("menu", "Menu items"),
             ("categories", "Categories"), ("modifiers", "Modifier groups"),
-            ("options", "Modifier options"), ("links", "Item assignments"), ("services", "Services")]
+            ("options", "Modifier options"), ("links", "Modifier assignments"), ("services", "Services")]
 EDITORS = {
     "hours_override": (HoursOverride, HoursOverrideForm, "hours", "special hours"),
     "category": (MenuCategory, MenuCategoryForm, "categories", "category"),
     "item": (MenuItem, MenuItemForm, "menu", "menu item"),
     "group": (ModifierGroup, ModifierGroupForm, "modifiers", "modifier group"),
     "option": (ModifierOption, ModifierOptionEditorForm, "options", "modifier option"),
+    "category_link": (MenuCategoryModifierGroup, MenuCategoryModifierGroupForm, "links", "category assignment"),
     "link": (MenuItemModifierGroup, MenuItemModifierGroupForm, "links", "item assignment"),
 }
 
@@ -211,10 +212,11 @@ def restaurant_manage(request, tenant):
                 return redirect(_manage_url(tenant, "access"))
     context.update(
         hours_overrides=tenant.hours_overrides.all(),
-        categories=MenuCategory.objects.filter(tenant=tenant).prefetch_related("items"),
+        categories=MenuCategory.objects.filter(tenant=tenant).prefetch_related("items", "modifier_groups__group"),
         menu_items=MenuItem.objects.filter(tenant=tenant).select_related("category").prefetch_related("modifier_groups__group"),
-        modifier_groups=ModifierGroup.objects.filter(tenant=tenant).prefetch_related("options", "menuitemmodifiergroup_set"),
+        modifier_groups=ModifierGroup.objects.filter(tenant=tenant).prefetch_related("options", "menuitemmodifiergroup_set", "menucategorymodifiergroup_set"),
         options=ModifierOption.objects.filter(group__tenant=tenant).select_related("group"),
+        category_links=MenuCategoryModifierGroup.objects.filter(category__tenant=tenant, group__tenant=tenant).select_related("category", "group"),
         item_links=MenuItemModifierGroup.objects.filter(menu_item__tenant=tenant, group__tenant=tenant).select_related("menu_item", "group"),
         memberships=tenant.memberships.select_related("user") if can_manage_access else [],
     )
@@ -224,6 +226,8 @@ def restaurant_manage(request, tenant):
 def _editor_queryset(model, tenant):
     if model == ModifierOption:
         return model.objects.filter(group__tenant=tenant)
+    if model == MenuCategoryModifierGroup:
+        return model.objects.filter(category__tenant=tenant, group__tenant=tenant)
     if model == MenuItemModifierGroup:
         return model.objects.filter(menu_item__tenant=tenant, group__tenant=tenant)
     return model.objects.filter(tenant=tenant)
@@ -237,7 +241,7 @@ def catalog_edit(request, tenant, kind, object_id=None):
     instance = get_object_or_404(_editor_queryset(model, tenant), pk=object_id) if object_id else model()
     if kind in {"category", "item", "group", "hours_override"}:
         instance.tenant = tenant
-    kwargs = {"tenant": tenant} if kind in {"item", "option", "link"} else {}
+    kwargs = {"tenant": tenant} if kind in {"item", "option", "category_link", "link"} else {}
     initial = {}
     for field, related_model in [("menu_item", MenuItem), ("group", ModifierGroup), ("category", MenuCategory)]:
         value = request.GET.get(field)

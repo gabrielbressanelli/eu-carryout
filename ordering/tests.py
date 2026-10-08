@@ -8,8 +8,8 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from catalog.models import MenuCategory, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
-from catalog.pricing import validate_and_price
+from catalog.models import MenuCategory, MenuCategoryModifierGroup, MenuItem, MenuItemModifierGroup, ModifierGroup, ModifierOption
+from catalog.pricing import modifier_payload, validate_and_price
 from tenants.hours import OrderingHours
 from tenants.models import BusinessHour, HoursOverride, Tenant, TenantMembership
 from tenants.services import build_order_event_payload
@@ -78,6 +78,28 @@ class CustomerOrderingTests(TestCase):
         self.assertEqual(price, Decimal("23.00"))
         self.item.price = Decimal("20.01")
         self.assertEqual(validate_and_price(self.item, [self.half.pk])[0], Decimal("10.01"))
+
+    def test_category_modifier_groups_are_inherited_and_item_assignments_override_them(self):
+        category_group = ModifierGroup.objects.create(
+            tenant=self.tenant,
+            name="Shared toppings",
+            required=True,
+            min_choices=1,
+            max_choices=1,
+        )
+        topping = ModifierOption.objects.create(group=category_group, name="Basil")
+        MenuCategoryModifierGroup.objects.create(category=self.category, group=category_group)
+        second_item = MenuItem.objects.create(tenant=self.tenant, category=self.category, name="Pasta salad", price=Decimal("12.00"))
+
+        self.assertIn(category_group.pk, [group["id"] for group in modifier_payload(second_item)])
+        with self.assertRaisesMessage(ValueError, "Missing required selection: Shared toppings"):
+            validate_and_price(second_item, [])
+        self.assertEqual(validate_and_price(second_item, [topping.pk])[0], Decimal("12.00"))
+
+        MenuItemModifierGroup.objects.create(menu_item=self.item, group=category_group, required=False, min_choices=0, max_choices=0)
+        inherited_group = next(group for group in modifier_payload(self.item) if group["id"] == category_group.pk)
+        self.assertFalse(inherited_group["required"])
+        self.assertEqual(validate_and_price(self.item, [self.full.pk])[0], Decimal("20.00"))
 
     def test_required_duplicate_unavailable_and_out_of_scope_options_rejected(self):
         for ids in [[], [self.full.pk, self.half.pk], [self.full.pk, self.full.pk], [999999]]:
