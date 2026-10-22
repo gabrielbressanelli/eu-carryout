@@ -105,6 +105,20 @@ def _item_payload(item, dietary_tags=None):
     }
 
 
+def _ambiguous_match_payload(row, dietary_tags=None):
+    item = row["item"]
+    payload = _item_payload(item, dietary_tags)
+    return {
+        "item_id": item.id,
+        "name": item.name,
+        "confidence": row["confidence"],
+        "description": item.description,
+        "category": item.category.name,
+        "required_modifiers": payload["required_modifiers"],
+        "optional_modifiers": payload["optional_modifiers"],
+    }
+
+
 def _search_result_payload(query, result, dietary_tags=None):
     if result["match_status"] == "matched":
         return {
@@ -116,16 +130,7 @@ def _search_result_payload(query, result, dietary_tags=None):
         return {
             "match_status": "ambiguous",
             "query": query,
-            "matches": [
-                {
-                    "item_id": row["item"].id,
-                    "name": row["item"].name,
-                    "confidence": row["confidence"],
-                    "description": row["item"].description,
-                    "category": row["item"].category.name,
-                }
-                for row in result["candidates"]
-            ],
+            "matches": [_ambiguous_match_payload(row, dietary_tags) for row in result["candidates"]],
         }
     return {"match_status": "no_match", "query": query}
 

@@ -115,6 +115,35 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(response.json()["warnings"], [])
         self.assertEqual(response.json()["exact_total"], "17.50")
 
+    def test_ambiguous_menu_search_includes_category_modifiers_for_each_candidate(self):
+        category_group = ModifierGroup.objects.create(
+            tenant=self.tenant,
+            name="Side Salad",
+            required=True,
+            min_choices=1,
+            max_choices=1,
+        )
+        ModifierOption.objects.create(group=category_group, name="House Salad")
+        MenuCategoryModifierGroup.objects.create(category=self.category, group=category_group)
+        MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Calamari Special",
+            description="Lightly fried calamari special",
+            price="18.00",
+        )
+
+        response = self.client.get(
+            "/api/one-sixty-main/agent/menu/search?q=fried",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["match_status"], "ambiguous")
+        calamari = next(row for row in payload["matches"] if row["item_id"] == self.item.pk)
+        self.assertEqual(calamari["required_modifiers"][0]["name"], "Side Salad")
+        self.assertEqual(calamari["required_modifiers"][0]["options"][0]["name"], "House Salad")
+
     def test_menu_search_surfaces_build_item_from_modifier_terms(self):
         build_item = MenuItem.objects.create(
             tenant=self.tenant,
