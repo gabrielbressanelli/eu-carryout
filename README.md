@@ -45,7 +45,7 @@ STRIPE_APPLICATION_FEE_PERCENT=0
 STRIPE_APPLICATION_FEE_FIXED_CENTS=0
 ```
 
-Stripe payments use Connect direct charges. Configure each restaurant group's connected account in Django Admin under `Accounts` by setting `stripe_account_id` to the connected account id, for example `acct_...`. Optional application fees are controlled globally by `STRIPE_APPLICATION_FEE_PERCENT` and `STRIPE_APPLICATION_FEE_FIXED_CENTS`; per-account fee fields override the global defaults when set, including explicit zero-fee accounts.
+Stripe payments use Connect direct charges. Configure a default connected account in Django Admin under `Accounts` by setting `stripe_account_id` to the connected account ID, for example `acct_...`. A location can override that default by setting its own `stripe_account_id` under `Tenants`; leave the location field blank to use the parent account's default. Optional application fees are controlled globally by `STRIPE_APPLICATION_FEE_PERCENT` and `STRIPE_APPLICATION_FEE_FIXED_CENTS`; per-account fee fields override the global defaults when set, including explicit zero-fee accounts.
 
 ## Tenant Integrations
 

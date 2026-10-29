@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 
 from catalog.models import MenuCategory, MenuItem
 from catalog.pricing import modifier_payload, validate_and_price
-from tenants.services import get_tenant_by_slug
+from tenants.services import get_stripe_account_id, get_tenant_by_slug
 from tenants.access import restaurant_access
 from tenants.hours import OrderingHours
 
@@ -307,7 +307,7 @@ def create_checkout_session(request, tenant_slug):
     stripe_secret_key = getattr(settings, "STRIPE_SECRET_KEY", "")
     if not stripe_secret_key:
         return JsonResponse({"error": "Stripe is not configured."}, status=503)
-    stripe_account_id = cart.tenant.account.stripe_account_id
+    stripe_account_id = get_stripe_account_id(cart.tenant)
     if not stripe_account_id:
         return JsonResponse({"error": "Stripe is not configured for this restaurant."}, status=503)
 
@@ -398,7 +398,7 @@ def checkout_success(request, tenant_slug):
     stripe.api_key = stripe_secret_key
     try:
         order = draft_order or Order.objects.filter(stripe_session_id=session_id, tenant=tenant).select_related("tenant__account").first()
-        stripe_account_id = (order.tenant.account.stripe_account_id if order else tenant.account.stripe_account_id)
+        stripe_account_id = get_stripe_account_id(order.tenant if order else tenant)
         if not stripe_account_id:
             if draft_order:
                 return render(request, "ordering/success.html", {"tenant": tenant, "order": draft_order, "payment_pending": True})

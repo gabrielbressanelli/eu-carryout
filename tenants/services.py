@@ -20,6 +20,11 @@ def get_tenant_by_slug(tenant_slug: str) -> Tenant:
     return get_object_or_404(Tenant, slug=tenant_slug, is_active=True)
 
 
+def get_stripe_account_id(tenant: Tenant) -> str:
+    """Return a location override, falling back to the parent account default."""
+    return tenant.stripe_account_id or tenant.account.stripe_account_id
+
+
 def get_request_tenant(request) -> Tenant:
     tenant = getattr(request, "tenant", None)
     if tenant:

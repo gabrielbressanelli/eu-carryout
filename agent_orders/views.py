@@ -17,7 +17,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from catalog.models import MenuItem
 from catalog.pricing import effective_option_delta, modifier_assignments, validate_and_price
 from tenants.hours import OrderingHours
-from tenants.services import get_tenant_by_slug, run_enabled_integrations
+from tenants.services import get_stripe_account_id, get_tenant_by_slug, run_enabled_integrations
 
 from ordering.services import create_order_from_agent_cart
 from ordering.views import _platform_fee_amount_cents
@@ -492,7 +492,7 @@ def order_finalize(request, tenant_slug):
         return JsonResponse({"error": str(exc), "availability": OrderingHours(tenant).payload()}, status=400)
 
     stripe_secret_key = getattr(settings, "STRIPE_SECRET_KEY", "")
-    stripe_account_id = tenant.account.stripe_account_id
+    stripe_account_id = get_stripe_account_id(tenant)
     if not stripe_secret_key or not stripe_account_id:
         return JsonResponse({"error": "Stripe is not configured for this restaurant."}, status=503)
     try:

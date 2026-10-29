@@ -297,6 +297,41 @@ class AgentOrdersApiTests(TestCase):
         self.assertIn("Missing Dish", " ".join(payload["warnings"]))
         self.assertEqual(str(Order.objects.get().amount_paid), "16.00")
 
+    @override_settings(STRIPE_SECRET_KEY="test-key")
+    def test_finalize_summary_uses_location_stripe_account_override(self):
+        self.tenant.account.stripe_account_id = "acct_group_default"
+        self.tenant.account.save(update_fields=["stripe_account_id", "updated_at"])
+        self.tenant.stripe_account_id = "acct_location_override"
+        self.tenant.save(update_fields=["stripe_account_id", "updated_at"])
+        created = {}
+
+        def create_session(**kwargs):
+            created.update(kwargs)
+            return SimpleNamespace(
+                id="cs_test_agent_override",
+                url="https://checkout.stripe.test/agent",
+            )
+
+        stripe = SimpleNamespace(
+            checkout=SimpleNamespace(Session=SimpleNamespace(create=create_session))
+        )
+        with patch.dict("sys.modules", {"stripe": stripe}), patch(
+            "agent_orders.views.OrderingHours.validate_pickup",
+            return_value=timezone.now(),
+        ):
+            response = self.client.post(
+                "/api/one-sixty-main/agent/orders/finalize-summary",
+                data=json.dumps({
+                    "session_id": "call-finalize",
+                    "order_summary": "1x Calamari;",
+                }),
+                content_type="application/json",
+                **self.auth,
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(created["stripe_account"], "acct_location_override")
+
     def test_finalize_summary_with_no_resolved_lines_returns_warnings_without_order(self):
         response = self.client.post(
             "/api/one-sixty-main/agent/orders/finalize-summary",

@@ -34,6 +34,12 @@ class Account(models.Model):
 
 class Tenant(models.Model):
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="restaurants")
+    stripe_account_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Optional location-specific Stripe connected account ID. Leave blank to use the account default.",
+    )
     ordering_paused = models.BooleanField(default=False)
     closure_message = models.CharField(max_length=250, blank=True, default="")
     preparation_minutes = models.PositiveIntegerField(default=20, validators=[MinValueValidator(1), MaxValueValidator(240)])

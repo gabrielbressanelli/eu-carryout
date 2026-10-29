@@ -198,6 +198,26 @@ class CustomerOrderingTests(TestCase):
         self.assertEqual(build_order_event_payload(order)["items"][0]["note"], "No salt")
 
     @override_settings(STRIPE_SECRET_KEY="test-key")
+    def test_location_stripe_account_overrides_account_default(self):
+        self.add()
+        self.tenant.stripe_account_id = "acct_location_override"
+        self.tenant.save(update_fields=["stripe_account_id", "updated_at"])
+        session = SimpleNamespace(id="cs_test_location_override", url="https://checkout.stripe.test/session")
+        created = {}
+
+        def create_session(**kwargs):
+            created.update(kwargs)
+            return session
+
+        stripe = SimpleNamespace(api_key=None, checkout=SimpleNamespace(Session=SimpleNamespace(create=create_session)))
+        with patch.dict("sys.modules", {"stripe": stripe}):
+            response = self.checkout()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(created["stripe_account"], "acct_location_override")
+        self.assertEqual(created["metadata"]["stripe_account_id"], "acct_location_override")
+
+    @override_settings(STRIPE_SECRET_KEY="test-key")
     def test_checkout_requires_connected_stripe_account(self):
         self.add()
         self.tenant.account.stripe_account_id = ""
