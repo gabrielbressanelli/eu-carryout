@@ -86,6 +86,7 @@ def order_operations(request, tenant):
         })
     return render(request, "ordering/operations.html", {
         "tenant": tenant,
+        "operations_page": True,
         "orders": order_rows,
         "status": status,
         "period": period,

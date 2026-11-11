@@ -50,6 +50,8 @@ class OnboardingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Pending")
         self.assertContains(response, "Today")
+        self.assertContains(response, "Back to HostHub")
+        self.assertContains(response, "https://hosthub.160maincarryout.com/dashboard")
 
     def editor_url(self, kind, record=None, delete=False, tenant=None):
         route = "catalog_delete" if delete else "catalog_edit" if record else "catalog_create"
