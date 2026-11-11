@@ -15,6 +15,9 @@
   let quoteAbort;
   let returnToCart = false;
   let itemSaving = false;
+  let activeTrigger;
+  const formLocks = new WeakSet();
+  const buttonTimers = new WeakMap();
 
   function csrf() {
     return document.querySelector('[name="csrfmiddlewaretoken"]')?.value ||
@@ -24,6 +27,31 @@
     const pending = queue.then(action);
     queue = pending.catch(() => {});
     return pending;
+  }
+  function buttonLabel(button) {
+    return button?.querySelector("[data-button-label]") || button;
+  }
+  function setButtonState(button, state, label) {
+    if (!button) return;
+    const labelNode = buttonLabel(button);
+    if (!button.dataset.defaultLabel) button.dataset.defaultLabel = labelNode?.textContent?.trim() || "";
+    if (label !== undefined && labelNode) labelNode.textContent = label;
+    button.classList.toggle("is-busy", state === "busy");
+    button.classList.toggle("is-success", state === "success");
+    button.classList.toggle("is-error", state === "error");
+    button.setAttribute("aria-busy", String(state === "busy"));
+    if (button.matches("button")) button.disabled = state === "busy";
+  }
+  function restoreButton(button, delay = 0) {
+    if (!button) return;
+    window.clearTimeout(buttonTimers.get(button));
+    const restore = () => {
+      const labelNode = buttonLabel(button);
+      if (labelNode) labelNode.textContent = button.dataset.defaultLabel || labelNode.textContent;
+      setButtonState(button, "idle");
+    };
+    if (delay) buttonTimers.set(button, window.setTimeout(restore, delay));
+    else restore();
   }
   async function request(url, body) {
     const response = await fetch(url, {
@@ -36,7 +64,13 @@
   }
   function syncPay() {
     const button = document.querySelector("[data-pay-button]");
-    if (button) button.disabled = paying || cartCount === 0 || !cartValid || !pickup?.value;
+    if (!button) return;
+    if (paying) {
+      setButtonState(button, "busy", button.dataset.busyLabel || "Opening secure checkout…");
+      return;
+    }
+    if (button.classList.contains("is-busy")) restoreButton(button);
+    button.disabled = cartCount === 0 || !cartValid || !pickup?.value;
   }
   function replaceCart(data) {
     if (data.cart_html !== undefined) document.getElementById("cartSummaryContainer").innerHTML = data.cart_html;
@@ -96,7 +130,7 @@
     const version = ++quoteVersion;
     const button = itemForm.querySelector("[data-item-submit]");
     const error = itemForm.querySelector("[data-item-error]");
-    button.disabled = true;
+    setButtonState(button, "busy", "Checking options…");
     itemForm.querySelector("[data-item-total]").textContent = "";
     quoteAbort?.abort();
     quoteAbort = new AbortController();
@@ -110,10 +144,14 @@
       error.textContent = data.error || "";
       if (response.ok) {
         itemForm.querySelector("[data-item-total]").textContent = `$${data.total}`;
-        button.disabled = false;
+        setButtonState(button, "idle", itemData.line ? "Save changes" : "Add to cart");
       }
     } catch (errorValue) {
-      if (errorValue.name !== "AbortError" && version === quoteVersion) error.textContent = "Could not update the price. Please try again.";
+      if (errorValue.name !== "AbortError" && version === quoteVersion) {
+        error.textContent = "Could not update the price. Please try again.";
+        setButtonState(button, "idle", itemData.line ? "Save changes" : "Add to cart");
+        button.disabled = true;
+      }
     }
   }
   function buildGroups(item, line) {
@@ -169,8 +207,9 @@
       container.append(fieldset);
     }
   }
-  async function openItem(url) {
+  async function openItem(url, trigger) {
     if (itemSaving) return;
+    activeTrigger = trigger;
     const version = ++loadVersion;
     itemData = null;
     quoteVersion++;
@@ -180,7 +219,7 @@
     itemForm.querySelector("[data-item-content]").hidden = true;
     itemForm.querySelector("[data-item-error]").textContent = "";
     itemForm.querySelector("[data-item-total]").textContent = "";
-    itemForm.querySelector("[data-item-submit]").disabled = true;
+    setButtonState(itemForm.querySelector("[data-item-submit]"), "busy", "Loading item…");
     modalEl.querySelector("#itemModalTitle").textContent = "Customize item";
     const show = () => bootstrap.Modal.getOrCreateInstance(modalEl).show();
     const offcanvas = document.getElementById("cartOffcanvas");
@@ -210,6 +249,8 @@
       quote();
     } catch (error) {
       itemForm.querySelector("[data-item-error]").textContent = error.message;
+      restoreButton(activeTrigger);
+      activeTrigger = null;
     } finally {
       if (version === loadVersion) itemForm.querySelector("[data-item-loading]").hidden = true;
     }
@@ -219,11 +260,22 @@
     quoteVersion++;
     quoteAbort?.abort();
     itemData = null;
+    if (activeTrigger?.classList.contains("is-busy")) restoreButton(activeTrigger);
+    activeTrigger = null;
     if (returnToCart) bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("cartOffcanvas")).show();
   });
   document.addEventListener("click", event => {
     const button = event.target.closest("[data-customize-url]");
-    if (button && !paying) openItem(button.dataset.customizeUrl);
+    if (button && !paying && !button.classList.contains("is-busy")) {
+      event.preventDefault();
+      setButtonState(button, "busy", button.dataset.busyLabel || "Loading…");
+      openItem(button.dataset.customizeUrl, button);
+      return;
+    }
+    const link = event.target.closest("a[data-action-button]");
+    if (link && !link.classList.contains("is-busy")) {
+      setButtonState(link, "busy", link.dataset.busyLabel || "Loading…");
+    }
   });
   itemForm?.addEventListener("change", quote);
   itemForm?.elements.quantity.addEventListener("input", quote);
@@ -235,12 +287,19 @@
     const button = itemForm.querySelector("[data-item-submit]");
     const body = itemBody();
     const url = itemForm.action;
-    button.disabled = true;
+    setButtonState(button, "busy", itemData.line ? "Saving…" : "Adding…");
+    const editing = Boolean(itemData.line);
     try {
       await enqueue(() => mutate(url, body));
+      setButtonState(button, "success", editing ? "Saved" : "Added");
+      if (activeTrigger?.isConnected) {
+        setButtonState(activeTrigger, "success", editing ? "Saved" : (activeTrigger.dataset.successLabel || "Added"));
+        restoreButton(activeTrigger, 1800);
+      }
       if (version === loadVersion) bootstrap.Modal.getOrCreateInstance(modalEl).hide();
     } catch (error) {
       itemForm.querySelector("[data-item-error]").textContent = error.message;
+      setButtonState(button, "idle", editing ? "Save changes" : "Add to cart");
       button.disabled = false;
     } finally {
       itemSaving = false;
@@ -251,21 +310,39 @@
     const form = event.target;
     if (!form.matches("[data-cart-remove-form], [data-cart-update-form]")) return;
     event.preventDefault();
-    if (paying) return;
+    if (paying || formLocks.has(form)) return;
+    formLocks.add(form);
     const body = new FormData(form);
-    try { await enqueue(() => mutate(form.action, body)); }
-    catch (error) { window.alert(error.message); }
+    const button = form.querySelector("[data-action-button]");
+    setButtonState(button, "busy", button?.dataset.busyLabel || "Saving…");
+    try {
+      await enqueue(() => mutate(form.action, body));
+    } catch (error) {
+      await enqueue(refreshCart);
+    } finally {
+      formLocks.delete(form);
+      if (button?.isConnected) restoreButton(button);
+    }
   });
   document.addEventListener("change", async event => {
     const input = event.target;
     if (!input.matches("[data-cart-update-form] input[name='quantity']")) return;
-    if (paying) return;
     const form = input.closest("form");
+    if (!form) return;
+    if (paying || formLocks.has(form)) return;
+    formLocks.add(form);
     const body = new FormData(form);
     input.readOnly = true;
-    try { await enqueue(() => mutate(form.action, body)); }
-    catch (error) { window.alert(error.message); await enqueue(refreshCart); }
-    finally { input.readOnly = false; }
+    input.classList.add("is-busy");
+    try {
+      await enqueue(() => mutate(form.action, body));
+    } catch (error) {
+      await enqueue(refreshCart);
+    } finally {
+      formLocks.delete(form);
+      input.readOnly = false;
+      input.classList.remove("is-busy");
+    }
   });
   pickup?.addEventListener("change", syncPay);
   checkoutForm?.addEventListener("submit", async event => {

@@ -56,7 +56,7 @@
                         <strong>${{ item.price }}</strong>
                       </div>
                       <p class="text-muted menu-card-description">{{ item.description }}</p>
-                      <button class="btn btn-dark" type="button" data-customize-url="{% url 'item_options' tenant.slug item.pk %}">Add</button>
+                      <button class="btn btn-dark" type="button" data-customize-url="{% url 'item_options' tenant.slug item.pk %}" data-action-button data-busy-label="Loading item…" data-success-label="Added"><span data-button-label>Add</span></button>
                     </div>
                   </article>
                 </div>

@@ -47,7 +47,7 @@
               </select>
               <input type="hidden" name="cart_revision" value="{{ cart_revision }}">
               <p class="text-danger" data-checkout-error role="alert"></p>
-              <button id="pay-btn" type="submit" class="btn btn-dark btn-lg" data-pay-button {% if not lines or cart_errors or not availability.can_order %}disabled{% endif %}>Proceed to Payment</button>
+              <button id="pay-btn" type="submit" class="btn btn-dark btn-lg" data-pay-button data-busy-label="Opening secure checkout…" {% if not lines or cart_errors or not availability.can_order %}disabled{% endif %}><span data-button-label>Proceed to Payment</span></button>
             </form>
           </div>
         </div>

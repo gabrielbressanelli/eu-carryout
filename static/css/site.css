@@ -188,6 +188,57 @@ body {
 
 .btn {
   border-radius: 6px;
+  min-height: 42px;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+  touch-action: manipulation;
+}
+
+.btn:not(:disabled):active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.btn.is-busy,
+.btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.btn.is-busy {
+  pointer-events: none;
+}
+
+.btn.is-busy::before {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.45em;
+  content: "";
+  vertical-align: -0.08em;
+  border: 0.14em solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: carryout-spin 650ms linear infinite;
+}
+
+.btn.is-success {
+  color: #fff;
+  background-color: #198754;
+  border-color: #198754;
+  cursor: default;
+}
+
+.btn.is-error {
+  border-color: #dc3545;
+}
+
+.cart-qty-input.is-busy,
+.qty-input.is-busy {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+@keyframes carryout-spin {
+  to { transform: rotate(360deg); }
 }
 
 .cart-button {
@@ -508,6 +559,7 @@ body {
   .menu-section {
     scroll-margin-top: 9.75rem;
   }
+
 }
 
 @media (max-width: 575.98px) {
