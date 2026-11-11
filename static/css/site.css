@@ -48,6 +48,14 @@ body {
   min-height: 88px;
 }
 
+.checkout-page .nav-main-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.checkout-page .nav-actions {
+  grid-column: 2;
+}
+
 .navbar-brand {
   font-size: 1.45rem;
   font-weight: 700;
