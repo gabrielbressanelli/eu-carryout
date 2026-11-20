@@ -64,6 +64,38 @@ class AgentOrdersApiTests(TestCase):
         )
         self.assertEqual(response.json()["match_status"], "no_match")
 
+    def test_menu_search_accepts_json_post_body(self):
+        self.item.dietary_tags.add(self.vegan)
+        response = self.client.post(
+            "/api/one-sixty-main/agent/menu/search",
+            data=json.dumps({"q": "calamari", "dietary": ["vegan"]}),
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["match_status"], "matched")
+        self.assertEqual(response.json()["item"]["dietary_tags"][0]["slug"], "vegan")
+
+    def test_menu_categories_and_item_detail_accept_json_post_body(self):
+        response = self.client.post(
+            "/api/one-sixty-main/agent/menu/categories",
+            data=json.dumps({"q": "appetizers"}),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"][0]["name"], "Calamari")
+
+        response = self.client.post(
+            f"/api/one-sixty-main/agent/menu/items/{self.item.pk}/",
+            data=json.dumps({"dietary": ["vegan"]}),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["item"]["id"], self.item.pk)
+
     def test_menu_search_requires_agent_token(self):
         response = self.client.get("/api/one-sixty-main/agent/menu/search?q=calamari")
 
@@ -199,8 +231,8 @@ class AgentOrdersApiTests(TestCase):
 
         line_id = payload["cart_item"]["line_id"]
         response = self.client.patch(
-            f"/api/one-sixty-main/agent/cart/items/{line_id}?session_id=call-1",
-            data=json.dumps({"quantity": 3}),
+            f"/api/one-sixty-main/agent/cart/items/{line_id}",
+            data=json.dumps({"session_id": "call-1", "quantity": 3}),
             content_type="application/json",
             **self.auth,
         )
@@ -208,7 +240,9 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(response.json()["cart"]["subtotal"], "54.00")
 
         response = self.client.delete(
-            f"/api/one-sixty-main/agent/cart/items/{line_id}?session_id=call-1",
+            f"/api/one-sixty-main/agent/cart/items/{line_id}",
+            data=json.dumps({"session_id": "call-1"}),
+            content_type="application/json",
             **self.auth,
         )
         self.assertEqual(response.status_code, 200)

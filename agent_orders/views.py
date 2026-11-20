@@ -50,9 +50,25 @@ def _cleanup_stale_carts(tenant):
     AgentCallCart.objects.filter(tenant=tenant, updated_at__lt=cutoff).delete()
 
 
-def _dietary_filter(request):
-    raw = request.GET.get("dietary", "")
-    return [value.strip().lower().replace("-", "_") for value in raw.split(",") if value.strip()]
+def _request_data(request, allow_empty=False):
+    """Return GET query data or a JSON object for body-based agent requests."""
+    if request.method == "GET":
+        return request.GET, None
+    if allow_empty and not request.body:
+        return {}, None
+    try:
+        payload = json.loads(request.body)
+    except (TypeError, ValueError):
+        return None, JsonResponse({"error": "Invalid JSON body"}, status=400)
+    if not isinstance(payload, dict):
+        return None, JsonResponse({"error": "JSON body must be an object"}, status=400)
+    return payload, None
+
+
+def _dietary_filter(payload):
+    raw = payload.get("dietary", "")
+    values = raw if isinstance(raw, list) else str(raw).split(",")
+    return [str(value).strip().lower().replace("-", "_") for value in values if str(value).strip()]
 
 
 def _tag_payload(tags):
@@ -169,15 +185,23 @@ def _quantity_from_payload(payload):
         raise ValueError("quantity must be a positive integer")
 
 
-@require_GET
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
 def menu_search(request, tenant_slug):
     tenant = _tenant_or_404(request, tenant_slug)
     auth_error = _require_agent_auth(request, tenant)
     if auth_error:
         return auth_error
 
-    raw_query = request.GET.get("q", "")
-    dietary_tags = _dietary_filter(request)
+    payload, payload_error = _request_data(request)
+    if payload_error:
+        return payload_error
+    raw_query = payload.get("q", "")
+    if raw_query is None:
+        raw_query = ""
+    if not isinstance(raw_query, str):
+        return JsonResponse({"error": "q must be a string"}, status=400)
+    dietary_tags = _dietary_filter(payload)
     phrases = [phrase.strip() for phrase in raw_query.split(",") if phrase.strip()]
     if len(phrases) <= 1:
         query = phrases[0] if phrases else raw_query
@@ -192,15 +216,23 @@ def menu_search(request, tenant_slug):
     })
 
 
-@require_GET
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
 def menu_categories(request, tenant_slug):
     tenant = _tenant_or_404(request, tenant_slug)
     auth_error = _require_agent_auth(request, tenant)
     if auth_error:
         return auth_error
 
-    query = request.GET.get("q", "")
-    dietary_tags = _dietary_filter(request)
+    payload, payload_error = _request_data(request)
+    if payload_error:
+        return payload_error
+    query = payload.get("q", "")
+    if query is None:
+        query = ""
+    if not isinstance(query, str):
+        return JsonResponse({"error": "q must be a string"}, status=400)
+    dietary_tags = _dietary_filter(payload)
     items = search_menu_by_category(query, tenant, dietary_tags)
     return JsonResponse({
         "query": query,
@@ -208,18 +240,22 @@ def menu_categories(request, tenant_slug):
     })
 
 
-@require_GET
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
 def menu_item_detail(request, tenant_slug, item_id):
     tenant = _tenant_or_404(request, tenant_slug)
     auth_error = _require_agent_auth(request, tenant)
     if auth_error:
         return auth_error
 
+    payload, payload_error = _request_data(request)
+    if payload_error:
+        return payload_error
     try:
         item = MenuItem.objects.get(id=item_id, tenant=tenant, is_active=True)
     except MenuItem.DoesNotExist:
         return JsonResponse({"error": "Menu item not found"}, status=404)
-    return JsonResponse({"item": _item_payload(item, _dietary_filter(request))})
+    return JsonResponse({"item": _item_payload(item, _dietary_filter(payload))})
 
 
 @csrf_exempt
@@ -286,9 +322,12 @@ def cart_item_detail(request, tenant_slug, line_id):
     if auth_error:
         return auth_error
 
-    session_id = request.GET.get("session_id")
+    payload, payload_error = _request_data(request, allow_empty=True)
+    if payload_error:
+        return payload_error
+    session_id = payload.get("session_id") or request.GET.get("session_id")
     if not session_id:
-        return JsonResponse({"error": "session_id query param is required"}, status=400)
+        return JsonResponse({"error": "session_id is required"}, status=400)
 
     pk = _parse_line_id(line_id)
     if pk is None:
@@ -307,11 +346,6 @@ def cart_item_detail(request, tenant_slug, line_id):
     if request.method == "DELETE":
         item.delete()
         return JsonResponse({"success": True, "cart": {"subtotal": str(cart.subtotal())}})
-
-    try:
-        payload = json.loads(request.body)
-    except ValueError:
-        return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
     if "modifiers" in payload:
         selected_ids = [
