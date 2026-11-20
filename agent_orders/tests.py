@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from catalog.models import DietaryTag, MenuCategory, MenuCategoryModifierGroup, MenuItem, MenuItemAlias, MenuItemModifierGroup, ModifierGroup, ModifierOption, ModifierOptionAlias
@@ -100,6 +100,17 @@ class AgentOrdersApiTests(TestCase):
         response = self.client.get("/api/one-sixty-main/agent/menu/search?q=calamari")
 
         self.assertEqual(response.status_code, 401)
+
+    def test_json_post_menu_search_does_not_require_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        response = csrf_client.post(
+            "/api/one-sixty-main/agent/menu/search",
+            data=json.dumps({"q": "calamari"}),
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 200)
 
     def test_menu_search_matches_alias(self):
         response = self.client.get(
