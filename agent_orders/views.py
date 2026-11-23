@@ -455,6 +455,16 @@ def order_turn(request, tenant_slug):
         result = process_order_turn(tenant, payload)
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
+    except Exception:
+        log.exception("Unhandled agent order turn request", extra={"tenant_id": tenant.id})
+        return JsonResponse(
+            {
+                "success": False,
+                "status": "error",
+                "error": "The order action could not be completed. Please retry the same action.",
+            },
+            status=500,
+        )
     return JsonResponse(result, status=200 if result.get("success") else 422)
 
 

@@ -454,7 +454,7 @@ def process_order_turn(tenant, payload):
         for action in actions:
             action_id = _action_id(action["action_id"])
             stored = AgentOrderAction.objects.filter(session=session, action_id=action_id).first()
-            if stored:
+            if stored and stored.result.get("success") is True:
                 results.append(stored.result)
                 continue
             try:
@@ -464,12 +464,17 @@ def process_order_turn(tenant, payload):
                         action_result["status"] = "error"
                     result = {"action_id": action_id, **action_result}
                     if result["success"]:
-                        AgentOrderAction.objects.create(
-                            session=session,
-                            action_id=action_id,
-                            action_type=str(action.get("type", "")),
-                            result=result,
-                        )
+                        if stored:
+                            stored.action_type = str(action.get("type", ""))
+                            stored.result = result
+                            stored.save(update_fields=["action_type", "result"])
+                        else:
+                            AgentOrderAction.objects.create(
+                                session=session,
+                                action_id=action_id,
+                                action_type=str(action.get("type", "")),
+                                result=result,
+                            )
             except (ObjectDoesNotExist, TypeError, KeyError, ValueError, ValidationError) as exc:
                 result = {
                     "action_id": action_id,
@@ -487,12 +492,7 @@ def process_order_turn(tenant, payload):
                         "action_type": action.get("type", ""),
                     },
                 )
-                result = {
-                    "action_id": action_id,
-                    "success": False,
-                    "status": "error",
-                    "error": "The order action could not be completed. Please retry the same action.",
-                }
+                raise
             results.append(result)
         session.save(update_fields=["updated_at"])
         pending_count = session.pending_items.filter(

@@ -425,6 +425,89 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(len(cart_response.json()["items"]), 1)
         self.assertEqual(cart_response.json()["items"][0]["item_id"], filet.pk)
 
+    def test_order_turn_completes_marsala_pending_modifier_and_replays_success(self):
+        marsala = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Marsala",
+            price="28.00",
+        )
+        protein = ModifierGroup.objects.create(
+            tenant=self.tenant,
+            name="Protein for Saute",
+            required=True,
+        )
+        chicken = ModifierOption.objects.create(group=protein, name="Chicken")
+        MenuItemModifierGroup.objects.create(menu_item=marsala, group=protein)
+
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "marsala-lifecycle-call",
+                "actions": [{
+                    "action_id": "add-marsala",
+                    "type": "add_item",
+                    "phrase": "marsala",
+                    "quantity": 1,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(add_response.status_code, 200)
+        add_payload = add_response.json()
+        self.assertEqual(add_payload["pending_count"], 1)
+        pending_id = add_payload["next_question"]["pending_id"]
+        self.assertEqual(add_payload["next_question"]["group_id"], protein.pk)
+        self.assertEqual(add_payload["next_question"]["options"][0]["option_id"], chicken.pk)
+
+        select_payload = {
+            "session_id": "marsala-lifecycle-call",
+            "actions": [{
+                "action_id": "select-marsala-protein",
+                "type": "select_modifier",
+                "pending_id": pending_id,
+                "group_id": protein.pk,
+                "option_id": chicken.pk,
+            }],
+        }
+        select_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(select_payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(select_response.status_code, 200)
+        payload = select_response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["pending_count"], 0)
+        self.assertIsNone(payload["next_question"])
+        self.assertEqual(payload["order_stage"], "review_ready")
+        self.assertEqual(payload["results"][0]["status"], "added_to_cart")
+        self.assertEqual(payload["results"][0]["completed_item"]["item_id"], marsala.pk)
+        self.assertEqual(payload["results"][0]["completed_item"]["modifiers"][0]["id"], chicken.pk)
+
+        cart_response = self.client.get(
+            "/api/one-sixty-main/agent/cart/marsala-lifecycle-call",
+            **self.auth,
+        )
+        self.assertEqual(cart_response.status_code, 200)
+        self.assertEqual(len(cart_response.json()["items"]), 1)
+        self.assertEqual(cart_response.json()["pending_count"], 0)
+
+        retry_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(select_payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(retry_response.status_code, 200)
+        self.assertEqual(retry_response.json()["results"], payload["results"])
+        self.assertEqual(
+            len(self.client.get("/api/one-sixty-main/agent/cart/marsala-lifecycle-call", **self.auth).json()["items"]),
+            1,
+        )
+
     def test_order_turn_replays_same_action_without_duplicate_cart_line(self):
         payload = {
             "session_id": "idempotent-call",
