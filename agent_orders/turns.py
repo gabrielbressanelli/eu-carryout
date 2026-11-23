@@ -269,7 +269,10 @@ def _load_pending(session, action):
     except ValueError as exc:
         return None, {"success": False, "error": str(exc)}
     try:
-        pending = session.pending_items.select_for_update().select_related("menu_item").get(pk=pending_id)
+        # Lock only the pending-item row. `menu_item` is nullable, and combining
+        # select_for_update() with select_related("menu_item") creates a
+        # nullable outer join that PostgreSQL refuses to lock.
+        pending = session.pending_items.select_for_update().get(pk=pending_id)
     except AgentPendingItem.DoesNotExist:
         return None, {"success": False, "error": "Pending item not found"}
     if pending.status in {AgentPendingItem.STATUS_ADDED, AgentPendingItem.STATUS_CANCELLED}:
