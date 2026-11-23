@@ -24,9 +24,10 @@ from ordering.views import _platform_fee_amount_cents
 from ordering.cart import Cart
 from .auth import authenticate_agent_request
 from .matching import resolve_item_modifiers, search_menu, search_menu_by_category
-from .models import AgentCallCart, AgentCallCartItem
+from .models import AgentCallCart, AgentCallCartItem, AgentOrderSession
 from .order_summary import compute_total_from_summary
 from .order_summary import resolve_order_summary
+from .turns import active_pending_items, process_order_turn
 
 
 STALE_CART_MAX_AGE = timedelta(hours=4)
@@ -431,9 +432,30 @@ def cart_detail(request, tenant_slug, session_id):
 
     try:
         cart = AgentCallCart.objects.get(tenant=tenant, session_id=session_id)
+        payload = _cart_payload(cart)
     except AgentCallCart.DoesNotExist:
-        return JsonResponse({"session_id": session_id, "items": [], "cart": {"subtotal": "0.00"}})
-    return JsonResponse(_cart_payload(cart))
+        payload = {"session_id": session_id, "items": [], "cart": {"subtotal": "0.00"}}
+    session = AgentOrderSession.objects.filter(tenant=tenant, session_id=session_id).first()
+    payload["pending_items"] = active_pending_items(session)
+    payload["pending_count"] = len(payload["pending_items"])
+    return JsonResponse(payload)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def order_turn(request, tenant_slug):
+    tenant = _tenant_or_404(request, tenant_slug)
+    auth_error = _require_agent_auth(request, tenant)
+    if auth_error:
+        return auth_error
+    payload, payload_error = _request_data(request)
+    if payload_error:
+        return payload_error
+    try:
+        result = process_order_turn(tenant, payload)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(result)
 
 
 @csrf_exempt

@@ -103,3 +103,17 @@ Current foundation:
 - tenant/session-scoped call carts
 - add, update, remove, and read cart lines
 - order summary total estimation
+
+The ordering conversation controller is available at:
+
+```text
+POST /api/<tenant-slug>/agent/orders/turn
+```
+
+It requires the same `Authorization: Bearer <tenant-agent-token>` header as the other agent endpoints. The first version supports `add_item`, `select_item`, and `select_modifier` actions, persists unresolved items, returns the next required question, and writes complete items into the existing agent cart. Each action must include a unique `action_id` so retries do not create duplicate cart lines.
+
+The existing cart read endpoint also reports active pending items:
+
+```text
+GET /api/<tenant-slug>/agent/cart/<session-id>
+```

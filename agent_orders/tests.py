@@ -353,6 +353,104 @@ class AgentOrdersApiTests(TestCase):
             )
             self.assertEqual(response.status_code, 400)
 
+    def test_order_turn_persists_pending_modifier_and_completes_it(self):
+        filet = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            price="54.00",
+        )
+        temperature = ModifierGroup.objects.create(tenant=self.tenant, name="Temperature", required=True)
+        medium_rare = ModifierOption.objects.create(group=temperature, name="Medium Rare")
+        MenuItemModifierGroup.objects.create(menu_item=filet, group=temperature)
+
+        add_payload = {
+            "session_id": "turn-call",
+            "actions": [{
+                "action_id": "add-filet",
+                "type": "add_item",
+                "phrase": "filet",
+                "quantity": 1,
+            }],
+        }
+        response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(add_payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["pending_count"], 1)
+        pending_id = payload["next_question"]["pending_id"]
+        self.assertEqual(payload["next_question"]["group_id"], temperature.pk)
+
+        cart_response = self.client.get(
+            "/api/one-sixty-main/agent/cart/turn-call",
+            **self.auth,
+        )
+        self.assertEqual(cart_response.status_code, 200)
+        self.assertEqual(cart_response.json()["items"], [])
+        self.assertEqual(cart_response.json()["pending_count"], 1)
+
+        response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "turn-call",
+                "actions": [{
+                    "action_id": "select-filet-temperature",
+                    "type": "select_modifier",
+                    "pending_id": pending_id,
+                    "group_id": temperature.pk,
+                    "value": "medium rare",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["pending_count"], 0)
+        self.assertEqual(payload["results"][0]["status"], "added_to_cart")
+        self.assertEqual(payload["results"][0]["completed_item"]["modifiers"][0]["id"], medium_rare.pk)
+
+        cart_response = self.client.get(
+            "/api/one-sixty-main/agent/cart/turn-call",
+            **self.auth,
+        )
+        self.assertEqual(len(cart_response.json()["items"]), 1)
+        self.assertEqual(cart_response.json()["items"][0]["item_id"], filet.pk)
+
+    def test_order_turn_replays_same_action_without_duplicate_cart_line(self):
+        payload = {
+            "session_id": "idempotent-call",
+            "actions": [{
+                "action_id": "add-calamari-once",
+                "type": "add_item",
+                "phrase": "calamari",
+                "quantity": 1,
+            }],
+        }
+        first = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        second = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["results"], second.json()["results"])
+        cart = self.client.get("/api/one-sixty-main/agent/cart/idempotent-call", **self.auth)
+        self.assertEqual(len(cart.json()["items"]), 1)
+
     def test_cart_rejects_modifier_from_another_item(self):
         other_category = MenuCategory.objects.create(
             tenant=self.tenant,
