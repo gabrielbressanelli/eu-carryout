@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import Max
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 
 from catalog.models import MenuItem
 from catalog.pricing import modifier_assignments, validate_and_price
@@ -190,9 +191,13 @@ def _create_pending(session, action, item=None, candidates=None, selected_modifi
 
 
 def _pending_result(pending):
+    status = "ambiguous" if pending.status in {
+        AgentPendingItem.STATUS_AMBIGUOUS,
+        AgentPendingItem.STATUS_NEEDS_ITEM,
+    } else "needs_input"
     return {
         "success": True,
-        "status": "pending",
+        "status": status,
         "pending_item": pending_item_payload(pending),
     }
 
@@ -202,6 +207,7 @@ def _added_result(pending=None, cart_item=None):
         "success": True,
         "status": "added_to_cart",
         "completed_item": _cart_item_payload(cart_item),
+        "line_id": f"line_{cart_item.pk}",
         **({"pending_id": _external_pending_id(pending)} if pending else {}),
     }
 
@@ -264,9 +270,18 @@ def _process_select_item(session, action):
     if pending.status not in {AgentPendingItem.STATUS_AMBIGUOUS, AgentPendingItem.STATUS_NEEDS_ITEM}:
         return {"success": False, "error": "This pending item does not need an item selection"}
     try:
-        item_id = _positive_integer(action.get("item_id"), "item_id")
+        item_id = _positive_integer(action.get("item_id", action.get("candidate_item_id")), "item_id")
     except ValueError as exc:
-        return {"success": False, "error": str(exc)}
+        return {
+            "success": False,
+            "status": "ambiguous",
+            "pending_id": _external_pending_id(pending),
+            "candidates": [
+                {"item_id": candidate_id}
+                for candidate_id in pending.candidate_item_ids
+            ],
+            "error": str(exc),
+        }
     if item_id not in pending.candidate_item_ids:
         return {"success": False, "error": "Selected item is not one of the pending candidates"}
     try:
@@ -343,6 +358,14 @@ def _process_action(session, action):
     return {"success": False, "error": f"Unsupported action type: {action_type or 'missing'}"}
 
 
+def _order_stage(session, pending_count):
+    if pending_count:
+        return "needs_input"
+    if AgentCallCart.objects.filter(tenant=session.tenant, session_id=session.session_id, items__isnull=False).exists():
+        return "review_ready"
+    return "collecting"
+
+
 def next_question(session):
     pending = session.pending_items.select_related("menu_item").filter(
         status__in=[AgentPendingItem.STATUS_NEEDS_ITEM, AgentPendingItem.STATUS_AMBIGUOUS, AgentPendingItem.STATUS_NEEDS_INPUT]
@@ -368,7 +391,7 @@ def next_question(session):
     for menu_group in modifier_assignments(pending.menu_item):
         if menu_group.group_id == missing["group_id"]:
             options = [
-                {"option_id": option.pk, "option_name": option.name}
+                {"option_id": option.pk, "name": option.name, "option_name": option.name}
                 for option in menu_group.group.options.filter(is_active=True).order_by("sort_order", "name")
             ]
             break
@@ -403,13 +426,26 @@ def process_order_turn(tenant, payload):
             if stored:
                 results.append(stored.result)
                 continue
-            result = {"action_id": action_id, **_process_action(session, action.copy())}
-            AgentOrderAction.objects.create(
-                session=session,
-                action_id=action_id,
-                action_type=str(action.get("type", "")),
-                result=result,
-            )
+            try:
+                with transaction.atomic():
+                    action_result = _process_action(session, action.copy())
+                    if not action_result.get("success") and "status" not in action_result:
+                        action_result["status"] = "error"
+                    result = {"action_id": action_id, **action_result}
+                    if result["success"]:
+                        AgentOrderAction.objects.create(
+                            session=session,
+                            action_id=action_id,
+                            action_type=str(action.get("type", "")),
+                            result=result,
+                        )
+            except (ObjectDoesNotExist, TypeError, KeyError, ValueError, ValidationError) as exc:
+                result = {
+                    "action_id": action_id,
+                    "success": False,
+                    "status": "error",
+                    "error": str(exc) or "Invalid order action",
+                }
             results.append(result)
         session.save(update_fields=["updated_at"])
         pending_count = session.pending_items.filter(
@@ -421,4 +457,5 @@ def process_order_turn(tenant, payload):
             "results": results,
             "pending_count": pending_count,
             "next_question": next_question(session),
+            "order_stage": _order_stage(session, pending_count),
         }

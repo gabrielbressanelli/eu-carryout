@@ -455,7 +455,7 @@ def order_turn(request, tenant_slug):
         result = process_order_turn(tenant, payload)
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
-    return JsonResponse(result)
+    return JsonResponse(result, status=200 if result.get("success") else 422)
 
 
 @csrf_exempt

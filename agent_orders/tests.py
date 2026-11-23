@@ -383,6 +383,7 @@ class AgentOrdersApiTests(TestCase):
         payload = response.json()
         self.assertTrue(payload["success"])
         self.assertEqual(payload["pending_count"], 1)
+        self.assertEqual(payload["order_stage"], "needs_input")
         pending_id = payload["next_question"]["pending_id"]
         self.assertEqual(payload["next_question"]["group_id"], temperature.pk)
 
@@ -413,6 +414,7 @@ class AgentOrdersApiTests(TestCase):
         payload = response.json()
         self.assertTrue(payload["success"])
         self.assertEqual(payload["pending_count"], 0)
+        self.assertEqual(payload["order_stage"], "review_ready")
         self.assertEqual(payload["results"][0]["status"], "added_to_cart")
         self.assertEqual(payload["results"][0]["completed_item"]["modifiers"][0]["id"], medium_rare.pk)
 
@@ -450,6 +452,121 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(first.json()["results"], second.json()["results"])
         cart = self.client.get("/api/one-sixty-main/agent/cart/idempotent-call", **self.auth)
         self.assertEqual(len(cart.json()["items"]), 1)
+
+    def test_order_turn_returns_structured_error_for_missing_candidate_id(self):
+        MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Calamari Special",
+            description="Lightly fried calamari special",
+            price="18.00",
+        )
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "ambiguous-call",
+                "actions": [{
+                    "action_id": "add-fried",
+                    "type": "add_item",
+                    "phrase": "fried",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(add_response.status_code, 200)
+        pending_id = add_response.json()["next_question"]["pending_id"]
+
+        select_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "ambiguous-call",
+                "actions": [{
+                    "action_id": "select-fried-item",
+                    "type": "select_item",
+                    "pending_id": pending_id,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(select_response.status_code, 422)
+        payload = select_response.json()
+        self.assertFalse(payload["success"])
+        self.assertEqual(payload["results"][0]["status"], "ambiguous")
+        self.assertEqual(payload["pending_count"], 1)
+        self.assertEqual(payload["order_stage"], "needs_input")
+
+    def test_order_turn_returns_structured_error_for_invalid_modifier(self):
+        filet = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            price="54.00",
+        )
+        temperature = ModifierGroup.objects.create(tenant=self.tenant, name="Temperature", required=True)
+        ModifierOption.objects.create(group=temperature, name="Medium Rare")
+        MenuItemModifierGroup.objects.create(menu_item=filet, group=temperature)
+
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "invalid-modifier-call",
+                "actions": [{
+                    "action_id": "add-filet",
+                    "type": "add_item",
+                    "phrase": "filet",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        pending_id = add_response.json()["next_question"]["pending_id"]
+
+        select_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "invalid-modifier-call",
+                "actions": [{
+                    "action_id": "select-invalid-temperature",
+                    "type": "select_modifier",
+                    "pending_id": pending_id,
+                    "group_id": temperature.pk,
+                    "option_id": 999999,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(select_response.status_code, 422)
+        self.assertFalse(select_response.json()["success"])
+        self.assertEqual(select_response.json()["pending_count"], 1)
+        self.assertEqual(
+            self.client.get("/api/one-sixty-main/agent/cart/invalid-modifier-call", **self.auth).json()["items"],
+            [],
+        )
+
+        retry_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "invalid-modifier-call",
+                "actions": [{
+                    "action_id": "select-invalid-temperature",
+                    "type": "select_modifier",
+                    "pending_id": pending_id,
+                    "group_id": temperature.pk,
+                    "option_id": temperature.options.get(name="Medium Rare").pk,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(retry_response.status_code, 200)
+        self.assertTrue(retry_response.json()["success"])
+        self.assertEqual(
+            len(self.client.get("/api/one-sixty-main/agent/cart/invalid-modifier-call", **self.auth).json()["items"]),
+            1,
+        )
 
     def test_cart_rejects_modifier_from_another_item(self):
         other_category = MenuCategory.objects.create(
