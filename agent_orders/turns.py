@@ -1,3 +1,5 @@
+import logging
+
 from django.db import transaction
 from django.db.models import Max
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -7,6 +9,8 @@ from catalog.pricing import modifier_assignments, validate_and_price
 
 from .matching import resolve_item_modifiers, search_menu
 from .models import AgentCallCart, AgentCallCartItem, AgentOrderAction, AgentOrderSession, AgentPendingItem
+
+log = logging.getLogger(__name__)
 
 
 def _positive_integer(value, field_name):
@@ -472,6 +476,22 @@ def process_order_turn(tenant, payload):
                     "success": False,
                     "status": "error",
                     "error": str(exc) or "Invalid order action",
+                }
+            except Exception:
+                log.exception(
+                    "Unhandled agent order action failure",
+                    extra={
+                        "tenant_id": session.tenant_id,
+                        "session_id": session.session_id,
+                        "action_id": action_id,
+                        "action_type": action.get("type", ""),
+                    },
+                )
+                result = {
+                    "action_id": action_id,
+                    "success": False,
+                    "status": "error",
+                    "error": "The order action could not be completed. Please retry the same action.",
                 }
             results.append(result)
         session.save(update_fields=["updated_at"])

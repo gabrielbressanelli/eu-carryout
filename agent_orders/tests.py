@@ -516,6 +516,94 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(retry_response.json()["results"][0]["status"], "added_to_cart")
         self.assertEqual(retry_response.json()["pending_count"], 0)
 
+    @patch("agent_orders.turns.search_menu")
+    def test_order_turn_select_item_successfully_resolves_ambiguous_candidate(self, search_menu):
+        spicy_vodka = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Mezza Rigatoni Spicy Vodka",
+            price="19.00",
+        )
+        tomato_basil = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Mezza Rigatoni Tomato Basil",
+            price="18.00",
+        )
+        salmon = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Salmon",
+            price="26.00",
+        )
+        search_menu.return_value = {
+            "match_status": "ambiguous",
+            "query": "rigatoni with vodka sauce",
+            "candidates": [
+                {"item": spicy_vodka, "confidence": 0.86},
+                {"item": tomato_basil, "confidence": 0.78},
+                {"item": salmon, "confidence": 0.64},
+            ],
+        }
+
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "select-item-success-call",
+                "actions": [{
+                    "action_id": "add-rigatoni-vodka",
+                    "type": "add_item",
+                    "phrase": "rigatoni with vodka sauce",
+                    "quantity": 1,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(add_response.status_code, 200)
+        add_payload = add_response.json()
+        self.assertEqual(add_payload["pending_count"], 1)
+        pending_id = add_payload["next_question"]["pending_id"]
+        self.assertIn(spicy_vodka.pk, add_payload["next_question"]["candidate_item_ids"])
+
+        select_payload = {
+            "session_id": "select-item-success-call",
+            "actions": [{
+                "action_id": "select-rigatoni-vodka",
+                "type": "select_item",
+                "pending_id": pending_id,
+                "item_id": spicy_vodka.pk,
+            }],
+        }
+        select_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(select_payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(select_response.status_code, 200)
+        payload = select_response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["pending_count"], 0)
+        self.assertEqual(payload["order_stage"], "review_ready")
+        self.assertEqual(payload["results"][0]["status"], "added_to_cart")
+        self.assertEqual(payload["results"][0]["completed_item"]["item_id"], spicy_vodka.pk)
+
+        retry_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(select_payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(retry_response.status_code, 200)
+        self.assertEqual(retry_response.json()["results"], payload["results"])
+        cart = self.client.get(
+            "/api/one-sixty-main/agent/cart/select-item-success-call",
+            **self.auth,
+        ).json()
+        self.assertEqual(len(cart["items"]), 1)
+        self.assertEqual(cart["items"][0]["item_id"], spicy_vodka.pk)
+
     def test_order_turn_returns_structured_error_for_invalid_modifier(self):
         filet = MenuItem.objects.create(
             tenant=self.tenant,
