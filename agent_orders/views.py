@@ -23,7 +23,7 @@ from ordering.services import create_order_from_agent_cart
 from ordering.views import _platform_fee_amount_cents
 from ordering.cart import Cart
 from .auth import authenticate_agent_request
-from .matching import search_menu, search_menu_by_category
+from .matching import resolve_item_modifiers, search_menu, search_menu_by_category
 from .models import AgentCallCart, AgentCallCartItem
 from .order_summary import compute_total_from_summary
 from .order_summary import resolve_order_summary
@@ -137,10 +137,15 @@ def _ambiguous_match_payload(row, dietary_tags=None):
 
 def _search_result_payload(query, result, dietary_tags=None):
     if result["match_status"] == "matched":
+        item = result["item"]
+        preselected_modifiers, missing_required_groups = resolve_item_modifiers(query, item)
         return {
             "match_status": "matched",
             "confidence": result.get("confidence"),
-            "item": _item_payload(result["item"], dietary_tags),
+            "item": _item_payload(item, dietary_tags),
+            "preselected_modifiers": preselected_modifiers,
+            "missing_required_groups": missing_required_groups,
+            "ready_for_cart": not missing_required_groups,
         }
     if result["match_status"] == "ambiguous":
         return {

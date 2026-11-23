@@ -80,6 +80,66 @@ def _explicit_item_match(query, items):
     return next(item for item in items if item.id == best_ids[0])
 
 
+def resolve_item_modifiers(query, item):
+    """Resolve modifier names explicitly spoken in a menu search phrase."""
+    selected = []
+    missing_required_groups = []
+    normalized_query = _normalize(query)
+
+    for menu_group in modifier_assignments(item):
+        option_matches = {}
+        for option in menu_group.group.options.all():
+            if not option.is_active:
+                continue
+            candidates = [option.name] + [alias.alias for alias in option.aliases.all()]
+            for candidate in candidates:
+                candidate = _normalize(candidate)
+                if not candidate:
+                    continue
+                match = re.search(rf"(?<!\w){re.escape(candidate)}(?!\w)", normalized_query)
+                if not match:
+                    continue
+                current = option_matches.get(option.id)
+                entry = {"option": option, "span": match.span(), "length": len(candidate)}
+                if not current or entry["length"] > current["length"]:
+                    option_matches[option.id] = entry
+
+        matches = sorted(
+            option_matches.values(),
+            key=lambda entry: (-entry["length"], entry["span"][0], entry["option"].sort_order, entry["option"].name),
+        )
+        chosen = []
+        for entry in matches:
+            if any(
+                entry["span"][0] < chosen_entry["span"][1]
+                and entry["span"][1] > chosen_entry["span"][0]
+                for chosen_entry in chosen
+            ):
+                continue
+            chosen.append(entry)
+            if menu_group.effective_max() == 1:
+                break
+
+        for entry in chosen:
+            option = entry["option"]
+            selected.append({
+                "group_id": menu_group.group_id,
+                "group_name": menu_group.group.name,
+                "option_id": option.id,
+                "option_name": option.name,
+            })
+
+        minimum = max(1 if menu_group.effective_required() else 0, menu_group.effective_min())
+        if len(chosen) < minimum:
+            missing_required_groups.append({
+                "group_id": menu_group.group_id,
+                "group_name": menu_group.group.name,
+                "min_choices": minimum,
+            })
+
+    return selected, missing_required_groups
+
+
 def search_menu(query, tenant, dietary_tags=None):
     query = _normalize(query)
     if not query:

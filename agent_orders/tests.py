@@ -124,13 +124,16 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(payload["item"]["name"], "Calamari")
 
     def test_menu_search_prefers_explicit_item_name_over_preparation_phrase(self):
-        MenuItem.objects.create(
+        filet = MenuItem.objects.create(
             tenant=self.tenant,
             category=self.category,
             name="Filet",
             description="8oz center cut, chargrilled, served with vegetables.",
             price="28.00",
         )
+        temperature = ModifierGroup.objects.create(tenant=self.tenant, name="Temperature")
+        medium_rare = ModifierOption.objects.create(group=temperature, name="Medium Rare")
+        MenuItemModifierGroup.objects.create(menu_item=filet, group=temperature)
         MenuItem.objects.create(
             tenant=self.tenant,
             category=self.category,
@@ -147,6 +150,48 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["match_status"], "matched")
         self.assertEqual(response.json()["item"]["name"], "Filet")
+        self.assertEqual(response.json()["preselected_modifiers"], [{
+            "group_id": temperature.pk,
+            "group_name": "Temperature",
+            "option_id": medium_rare.pk,
+            "option_name": "Medium Rare",
+        }])
+        self.assertEqual(response.json()["missing_required_groups"], [])
+        self.assertTrue(response.json()["ready_for_cart"])
+
+    def test_menu_search_resolves_multiple_build_your_own_modifiers(self):
+        build_item = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Build Your Own Pasta",
+            price="14.00",
+        )
+        pasta_group = ModifierGroup.objects.create(tenant=self.tenant, name="Pasta", required=True)
+        sauce_group = ModifierGroup.objects.create(tenant=self.tenant, name="Build Sauce", required=True)
+        protein_group = ModifierGroup.objects.create(tenant=self.tenant, name="Protein", required=True)
+        penne = ModifierOption.objects.create(group=pasta_group, name="Penne")
+        alfredo = ModifierOption.objects.create(group=sauce_group, name="Alfredo Sauce")
+        chicken = ModifierOption.objects.create(group=protein_group, name="Chicken")
+        for group in (pasta_group, sauce_group, protein_group):
+            MenuItemModifierGroup.objects.create(menu_item=build_item, group=group)
+
+        response = self.client.post(
+            "/api/one-sixty-main/agent/menu/search",
+            data=json.dumps({"q": "penne pasta with alfredo sauce and chicken"}),
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["match_status"], "matched")
+        self.assertEqual(payload["item"]["name"], "Build Your Own Pasta")
+        self.assertEqual(
+            {modifier["option_id"] for modifier in payload["preselected_modifiers"]},
+            {penne.pk, alfredo.pk, chicken.pk},
+        )
+        self.assertEqual(payload["missing_required_groups"], [])
+        self.assertTrue(payload["ready_for_cart"])
 
     def test_menu_search_includes_required_category_modifiers(self):
         category_group = ModifierGroup.objects.create(
