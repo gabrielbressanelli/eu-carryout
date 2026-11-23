@@ -63,6 +63,16 @@ def _pending_pk(value):
     return int(raw)
 
 
+def _candidate_items(pending):
+    return list(
+        MenuItem.objects.filter(
+            pk__in=pending.candidate_item_ids,
+            tenant=pending.session.tenant,
+            is_active=True,
+        ).order_by("name", "pk")
+    )
+
+
 def _cart_item_payload(item):
     return {
         "line_id": f"line_{item.pk}",
@@ -269,18 +279,34 @@ def _process_select_item(session, action):
         return error
     if pending.status not in {AgentPendingItem.STATUS_AMBIGUOUS, AgentPendingItem.STATUS_NEEDS_ITEM}:
         return {"success": False, "error": "This pending item does not need an item selection"}
+    item_id_value = action.get("item_id", action.get("candidate_item_id"))
+    if item_id_value is None:
+        candidate_name = action.get("value", action.get("item_name"))
+        if isinstance(candidate_name, str) and candidate_name.strip():
+            normalized_name = candidate_name.strip().casefold()
+            name_matches = [
+                item for item in _candidate_items(pending)
+                if item.name.strip().casefold() == normalized_name
+            ]
+            if len(name_matches) == 1:
+                item_id_value = name_matches[0].pk
+            else:
+                item_id_value = None
+        else:
+            candidate_name = None
     try:
-        item_id = _positive_integer(action.get("item_id", action.get("candidate_item_id")), "item_id")
+        item_id = _positive_integer(item_id_value, "item_id")
     except ValueError as exc:
+        candidates = _candidate_items(pending)
         return {
             "success": False,
             "status": "ambiguous",
             "pending_id": _external_pending_id(pending),
             "candidates": [
-                {"item_id": candidate_id}
-                for candidate_id in pending.candidate_item_ids
+                {"item_id": item.pk, "item_name": item.name}
+                for item in candidates
             ],
-            "error": str(exc),
+            "error": "select_item requires the exact candidate item_id or item_name",
         }
     if item_id not in pending.candidate_item_ids:
         return {"success": False, "error": "Selected item is not one of the pending candidates"}
@@ -384,6 +410,7 @@ def next_question(session):
             "pending_id": _external_pending_id(pending),
             "item_name": None,
             "question": question,
+            "candidate_item_ids": [item.pk for item in candidates],
             "candidates": [{"item_id": item.pk, "item_name": item.name} for item in candidates],
         }
     missing = pending.missing_groups[0]

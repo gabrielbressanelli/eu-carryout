@@ -497,6 +497,25 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(payload["pending_count"], 1)
         self.assertEqual(payload["order_stage"], "needs_input")
 
+        retry_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "ambiguous-call",
+                "actions": [{
+                    "action_id": "select-fried-item",
+                    "type": "select_item",
+                    "pending_id": pending_id,
+                    "item_name": "Calamari Special",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(retry_response.status_code, 200)
+        self.assertTrue(retry_response.json()["success"])
+        self.assertEqual(retry_response.json()["results"][0]["status"], "added_to_cart")
+        self.assertEqual(retry_response.json()["pending_count"], 0)
+
     def test_order_turn_returns_structured_error_for_invalid_modifier(self):
         filet = MenuItem.objects.create(
             tenant=self.tenant,
