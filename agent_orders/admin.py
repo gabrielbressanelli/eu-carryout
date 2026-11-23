@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import AgentAccessToken, AgentCallCart, AgentCallCartItem
+from .models import (
+    AgentAccessToken,
+    AgentCallCart,
+    AgentCallCartItem,
+    AgentOrderAction,
+    AgentOrderSession,
+    AgentPendingItem,
+)
 
 
 @admin.register(AgentAccessToken)
@@ -30,3 +37,64 @@ class AgentCallCartItemAdmin(admin.ModelAdmin):
     list_display = ("cart", "menu_item", "quantity", "unit_price", "created_at")
     list_filter = ("cart__tenant",)
     search_fields = ("cart__session_id", "menu_item__name")
+
+
+class AgentPendingItemInline(admin.TabularInline):
+    model = AgentPendingItem
+    extra = 0
+    can_delete = False
+    fields = (
+        "sequence",
+        "status",
+        "original_phrase",
+        "menu_item",
+        "quantity",
+        "selected_modifiers",
+        "missing_groups",
+        "special_instructions",
+        "cart_item",
+        "created_at",
+        "updated_at",
+    )
+    readonly_fields = fields
+
+
+class AgentOrderActionInline(admin.TabularInline):
+    model = AgentOrderAction
+    extra = 0
+    can_delete = False
+    fields = ("action_id", "action_type", "result", "created_at")
+    readonly_fields = fields
+
+
+@admin.register(AgentOrderSession)
+class AgentOrderSessionAdmin(admin.ModelAdmin):
+    list_display = ("tenant", "session_id", "status", "created_at", "updated_at")
+    list_filter = ("tenant", "status")
+    search_fields = ("tenant__name", "session_id")
+    readonly_fields = ("created_at", "updated_at")
+    inlines = [AgentPendingItemInline, AgentOrderActionInline]
+
+
+@admin.register(AgentPendingItem)
+class AgentPendingItemAdmin(admin.ModelAdmin):
+    list_display = (
+        "session",
+        "sequence",
+        "status",
+        "original_phrase",
+        "menu_item",
+        "quantity",
+        "updated_at",
+    )
+    list_filter = ("session__tenant", "status")
+    search_fields = ("session__session_id", "session__tenant__name", "original_phrase", "menu_item__name")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AgentOrderAction)
+class AgentOrderActionAdmin(admin.ModelAdmin):
+    list_display = ("session", "action_id", "action_type", "created_at")
+    list_filter = ("session__tenant", "action_type")
+    search_fields = ("session__session_id", "session__tenant__name", "action_id")
+    readonly_fields = ("created_at", "result")
