@@ -1,3 +1,4 @@
+import re
 from difflib import SequenceMatcher
 
 from django.db.models import Q
@@ -57,6 +58,28 @@ def _item_score(query, item):
     return base_score
 
 
+def _explicit_item_match(query, items):
+    """Find one item whose name or alias is explicitly present in the phrase."""
+    matches = {}
+    for item in items:
+        candidates = [item.name] + [alias.alias for alias in item.aliases.all()]
+        matched_lengths = []
+        for candidate in candidates:
+            candidate = _normalize(candidate)
+            if candidate and re.search(rf"(?<!\w){re.escape(candidate)}(?!\w)", query):
+                matched_lengths.append(len(candidate))
+        if matched_lengths:
+            matches[item.id] = max(matched_lengths)
+
+    if not matches:
+        return None
+    longest = max(matches.values())
+    best_ids = [item_id for item_id, length in matches.items() if length == longest]
+    if len(best_ids) != 1:
+        return None
+    return next(item for item in items if item.id == best_ids[0])
+
+
 def search_menu(query, tenant, dietary_tags=None):
     query = _normalize(query)
     if not query:
@@ -69,10 +92,13 @@ def search_menu(query, tenant, dietary_tags=None):
         return {"match_status": "matched", "item": exact.first(), "confidence": 1}
 
     best_by_item = {}
-    items = _tagged_items(tenant, dietary_tags or []).prefetch_related(
+    items = list(_tagged_items(tenant, dietary_tags or []).prefetch_related(
         "aliases", "category", "modifier_groups__group__options__aliases",
         "category__modifier_groups__group__options__aliases",
-    )
+    ))
+    explicit_item = _explicit_item_match(query, items)
+    if explicit_item:
+        return {"match_status": "matched", "item": explicit_item, "confidence": 1}
     for item in items:
         best_by_item[item.id] = (item, _item_score(query, item))
 

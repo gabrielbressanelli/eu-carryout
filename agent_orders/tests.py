@@ -123,6 +123,31 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(payload["match_status"], "matched")
         self.assertEqual(payload["item"]["name"], "Calamari")
 
+    def test_menu_search_prefers_explicit_item_name_over_preparation_phrase(self):
+        MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            description="8oz center cut, chargrilled, served with vegetables.",
+            price="28.00",
+        )
+        MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Lamb Chops",
+            description="Hand-cut chops, chargrilled and served with vegetables.",
+            price="24.00",
+        )
+
+        response = self.client.get(
+            "/api/one-sixty-main/agent/menu/search?q=filet+medium+rare",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["match_status"], "matched")
+        self.assertEqual(response.json()["item"]["name"], "Filet")
+
     def test_menu_search_includes_required_category_modifiers(self):
         category_group = ModifierGroup.objects.create(
             tenant=self.tenant,
