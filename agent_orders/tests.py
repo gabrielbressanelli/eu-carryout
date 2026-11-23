@@ -329,6 +329,30 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["cart"]["subtotal"], "0.00")
 
+    def test_cart_add_validates_retell_request_shape(self):
+        invalid_payloads = [
+            {"quantity": 0},
+            {"modifiers": {"option_id": self.option.pk}},
+            {"modifiers": [{}]},
+            {"special_instructions": "x" * 256},
+        ]
+        for change in invalid_payloads:
+            payload = {
+                "session_id": "call-invalid",
+                "item_id": self.item.pk,
+                "quantity": 1,
+                "modifiers": [],
+                "special_instructions": "",
+                **change,
+            }
+            response = self.client.post(
+                "/api/one-sixty-main/agent/cart/items",
+                data=json.dumps(payload),
+                content_type="application/json",
+                **self.auth,
+            )
+            self.assertEqual(response.status_code, 400)
+
     def test_cart_rejects_modifier_from_another_item(self):
         other_category = MenuCategory.objects.create(
             tenant=self.tenant,

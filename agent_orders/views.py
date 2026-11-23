@@ -184,10 +184,55 @@ def _parse_line_id(line_id):
 
 
 def _quantity_from_payload(payload):
+    return _positive_integer(payload.get("quantity", 1), "quantity")
+
+
+def _positive_integer(value, field_name):
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a positive integer")
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"{field_name} must be a positive integer")
     try:
-        return max(1, int(payload.get("quantity", 1)))
+        value = int(value)
     except (TypeError, ValueError):
-        raise ValueError("quantity must be a positive integer")
+        raise ValueError(f"{field_name} must be a positive integer")
+    if value < 1:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return value
+
+
+def _session_id(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("session_id must be a non-empty string")
+    value = value.strip()
+    if len(value) > 120:
+        raise ValueError("session_id must be 120 characters or fewer")
+    return value
+
+
+def _modifier_ids(payload):
+    modifiers = payload.get("modifiers", [])
+    if modifiers is None:
+        modifiers = []
+    if not isinstance(modifiers, list):
+        raise ValueError("modifiers must be an array")
+    option_ids = []
+    for modifier in modifiers:
+        if not isinstance(modifier, dict) or "option_id" not in modifier:
+            raise ValueError("Each modifier must include option_id")
+        option_ids.append(_positive_integer(modifier["option_id"], "option_id"))
+    return option_ids
+
+
+def _special_instructions(payload):
+    instructions = payload.get("special_instructions", "")
+    if instructions is None:
+        instructions = ""
+    if not isinstance(instructions, str):
+        raise ValueError("special_instructions must be a string")
+    if len(instructions) > 255:
+        raise ValueError("special_instructions must be 255 characters or fewer")
+    return instructions
 
 
 @csrf_exempt
@@ -271,26 +316,28 @@ def cart_items_create(request, tenant_slug):
     if auth_error:
         return auth_error
 
-    try:
-        payload = json.loads(request.body)
-    except ValueError:
-        return JsonResponse({"error": "Invalid JSON body"}, status=400)
+    payload, payload_error = _request_data(request)
+    if payload_error:
+        return payload_error
 
     session_id = payload.get("session_id")
     item_id = payload.get("item_id")
     if not session_id or not item_id:
         return JsonResponse({"error": "session_id and item_id are required"}, status=400)
+    try:
+        session_id = _session_id(session_id)
+        item_id = _positive_integer(item_id, "item_id")
+        quantity = _quantity_from_payload(payload)
+        selected_ids = _modifier_ids(payload)
+        special_instructions = _special_instructions(payload)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
 
     try:
         menu_item = MenuItem.objects.get(id=item_id, tenant=tenant, is_active=True)
     except (MenuItem.DoesNotExist, ValueError, TypeError):
         return JsonResponse({"error": f"Unknown item_id {item_id!r}"}, status=404)
 
-    selected_ids = [
-        modifier.get("option_id")
-        for modifier in (payload.get("modifiers") or [])
-        if modifier.get("option_id") is not None
-    ]
     try:
         unit_price, options_snapshot = validate_and_price(menu_item, selected_ids)
     except ValueError as exc:
@@ -298,10 +345,6 @@ def cart_items_create(request, tenant_slug):
 
     _cleanup_stale_carts(tenant)
     cart, _ = AgentCallCart.objects.get_or_create(tenant=tenant, session_id=session_id)
-    try:
-        quantity = _quantity_from_payload(payload)
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
 
     item = AgentCallCartItem.objects.create(
         cart=cart,
@@ -309,7 +352,7 @@ def cart_items_create(request, tenant_slug):
         quantity=quantity,
         unit_price=unit_price,
         options=options_snapshot,
-        special_instructions=payload.get("special_instructions", "") or "",
+        special_instructions=special_instructions,
     )
 
     return JsonResponse({
@@ -330,9 +373,10 @@ def cart_item_detail(request, tenant_slug, line_id):
     payload, payload_error = _request_data(request, allow_empty=True)
     if payload_error:
         return payload_error
-    session_id = payload.get("session_id") or request.GET.get("session_id")
-    if not session_id:
-        return JsonResponse({"error": "session_id is required"}, status=400)
+    try:
+        session_id = _session_id(payload.get("session_id") or request.GET.get("session_id"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
 
     pk = _parse_line_id(line_id)
     if pk is None:
@@ -353,12 +397,8 @@ def cart_item_detail(request, tenant_slug, line_id):
         return JsonResponse({"success": True, "cart": {"subtotal": str(cart.subtotal())}})
 
     if "modifiers" in payload:
-        selected_ids = [
-            modifier.get("option_id")
-            for modifier in (payload.get("modifiers") or [])
-            if modifier.get("option_id") is not None
-        ]
         try:
+            selected_ids = _modifier_ids(payload)
             item.unit_price, item.options = validate_and_price(item.menu_item, selected_ids)
         except ValueError as exc:
             return JsonResponse({"success": False, "error": str(exc)}, status=400)
@@ -369,7 +409,10 @@ def cart_item_detail(request, tenant_slug, line_id):
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
     if "special_instructions" in payload:
-        item.special_instructions = payload["special_instructions"] or ""
+        try:
+            item.special_instructions = _special_instructions(payload)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
     item.save()
 
     return JsonResponse({
