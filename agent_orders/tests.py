@@ -582,6 +582,117 @@ class AgentOrdersApiTests(TestCase):
             1,
         )
 
+    def test_order_turn_cancels_pending_item_without_creating_cart_line(self):
+        filet = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            price="54.00",
+        )
+        temperature = ModifierGroup.objects.create(tenant=self.tenant, name="Temperature", required=True)
+        ModifierOption.objects.create(group=temperature, name="Medium Rare")
+        MenuItemModifierGroup.objects.create(menu_item=filet, group=temperature)
+
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "cancel-pending-call",
+                "actions": [{
+                    "action_id": "add-filet-incomplete",
+                    "type": "add_item",
+                    "phrase": "filet",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(add_response.status_code, 200)
+        pending_id = add_response.json()["next_question"]["pending_id"]
+
+        cancel_payload = {
+            "session_id": "cancel-pending-call",
+            "actions": [{
+                "action_id": "cancel-filet-pending",
+                "type": "cancel_pending_item",
+                "pending_id": pending_id,
+            }],
+        }
+        cancel_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(cancel_payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(cancel_response.status_code, 200)
+        payload = cancel_response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["results"][0]["status"], "cancelled_pending_item")
+        self.assertEqual(payload["pending_count"], 0)
+        self.assertEqual(payload["order_stage"], "collecting")
+
+        cart = self.client.get("/api/one-sixty-main/agent/cart/cancel-pending-call", **self.auth).json()
+        self.assertEqual(cart["items"], [])
+        self.assertEqual(cart["pending_count"], 0)
+
+        retry_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps(cancel_payload),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(retry_response.status_code, 200)
+        self.assertEqual(retry_response.json()["results"], payload["results"])
+
+    def test_order_turn_blocks_cart_edits_for_active_pending_cart_link(self):
+        filet = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            price="54.00",
+        )
+        cart_response = self.client.post(
+            "/api/one-sixty-main/agent/cart/items",
+            data=json.dumps({
+                "session_id": "blocked-edit-call",
+                "item_id": filet.pk,
+                "quantity": 1,
+                "modifiers": [],
+                "special_instructions": "",
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        line_id = cart_response.json()["cart_item"]["line_id"]
+        from .models import AgentCallCart, AgentOrderSession, AgentPendingItem
+
+        session = AgentOrderSession.objects.create(tenant=self.tenant, session_id="blocked-edit-call")
+        AgentPendingItem.objects.create(
+            session=session,
+            sequence=1,
+            original_phrase="filet",
+            menu_item=filet,
+            cart_item=AgentCallCart.objects.get(session_id="blocked-edit-call", tenant=self.tenant).items.get(),
+            status=AgentPendingItem.STATUS_NEEDS_INPUT,
+            missing_groups=[{"group_id": 1, "group_name": "Temperature", "min_choices": 1}],
+        )
+
+        response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "blocked-edit-call",
+                "actions": [{
+                    "action_id": "blocked-edit",
+                    "type": "update_cart_item",
+                    "line_id": line_id,
+                    "quantity": 2,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("still pending", response.json()["results"][0]["error"])
+
     def test_order_turn_updates_quantity_and_removes_cart_line(self):
         add_response = self.client.post(
             "/api/one-sixty-main/agent/orders/turn",
@@ -617,6 +728,43 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(update_response.status_code, 200)
         self.assertEqual(update_response.json()["results"][0]["status"], "updated_cart_item")
         self.assertEqual(update_response.json()["results"][0]["cart_item"]["quantity"], 3)
+
+        instruction_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "cart-edit-call",
+                "actions": [{
+                    "action_id": "add-calamari-instructions",
+                    "type": "update_cart_item",
+                    "line_id": line_id,
+                    "special_instructions": "Sauce on the side",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(instruction_response.status_code, 200)
+        self.assertEqual(
+            instruction_response.json()["results"][0]["cart_item"]["special_instructions"],
+            "Sauce on the side",
+        )
+
+        clear_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "cart-edit-call",
+                "actions": [{
+                    "action_id": "clear-calamari-instructions",
+                    "type": "update_cart_item",
+                    "line_id": line_id,
+                    "special_instructions": "",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(clear_response.status_code, 200)
+        self.assertEqual(clear_response.json()["results"][0]["cart_item"]["special_instructions"], "")
 
         remove_response = self.client.post(
             "/api/one-sixty-main/agent/orders/turn",
@@ -732,6 +880,45 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(sorted(item["quantity"] for item in cart["items"]), [1, 1])
         modifier_ids = {item["modifiers"][0]["id"] for item in cart["items"]}
         self.assertEqual(modifier_ids, {medium.pk, rare.pk})
+
+    def test_order_turn_splits_special_instructions_for_part_of_quantity(self):
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/cart/items",
+            data=json.dumps({
+                "session_id": "split-instruction-call",
+                "item_id": self.item.pk,
+                "quantity": 2,
+                "modifiers": [],
+                "special_instructions": "",
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        line_id = add_response.json()["cart_item"]["line_id"]
+
+        response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "split-instruction-call",
+                "actions": [{
+                    "action_id": "add-one-no-tomatoes",
+                    "type": "update_cart_item",
+                    "line_id": line_id,
+                    "quantity_to_modify": 1,
+                    "special_instructions": "No tomatoes",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        cart = self.client.get("/api/one-sixty-main/agent/cart/split-instruction-call", **self.auth).json()
+        self.assertEqual(len(cart["items"]), 2)
+        self.assertEqual(sorted(item["quantity"] for item in cart["items"]), [1, 1])
+        self.assertEqual(
+            {item["special_instructions"] for item in cart["items"]},
+            {"", "No tomatoes"},
+        )
 
     def test_order_turn_replays_same_action_without_duplicate_cart_line(self):
         payload = {

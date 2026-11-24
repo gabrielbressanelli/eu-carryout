@@ -336,6 +336,21 @@ def _process_revise_pending_item(session, action):
     return _revise_pending_item(session, pending, phrase)
 
 
+def _process_cancel_pending_item(session, action):
+    pending, error = _load_pending(session, action)
+    if error:
+        return error
+    pending.status = AgentPendingItem.STATUS_CANCELLED
+    pending.save(update_fields=["status", "updated_at"])
+    return {
+        "success": True,
+        "status": "cancelled_pending_item",
+        "pending_id": _external_pending_id(pending),
+        "item_id": pending.menu_item_id,
+        "item_name": pending.menu_item.name if pending.menu_item else None,
+    }
+
+
 def _modifier_change_ids(item, existing_option_ids, changes):
     assignments = modifier_assignments(item)
     groups = {assignment.group_id: assignment for assignment in assignments}
@@ -374,15 +389,31 @@ def _process_update_cart_item(session, action):
     except (InvalidCartLineId, CartLineNotFound) as exc:
         return {"success": False, "error": str(exc)}
 
+    if AgentPendingItem.objects.filter(
+        session=session,
+        cart_item=line,
+        status__in=[AgentPendingItem.STATUS_NEEDS_ITEM, AgentPendingItem.STATUS_AMBIGUOUS, AgentPendingItem.STATUS_NEEDS_INPUT],
+    ).exists():
+        return {"success": False, "error": "This item is still pending and must be resolved or cancelled first"}
+
     has_quantity = "quantity" in action
     has_modifier_changes = "modifier_changes" in action
+    has_special_instructions = "special_instructions" in action
     has_quantity_to_modify = "quantity_to_modify" in action
-    if not has_quantity and not has_modifier_changes:
-        return {"success": False, "error": "update_cart_item requires quantity or modifier_changes"}
-    if has_quantity_to_modify and not has_modifier_changes:
-        return {"success": False, "error": "quantity_to_modify requires modifier_changes"}
+    if not has_quantity and not has_modifier_changes and not has_special_instructions:
+        return {"success": False, "error": "update_cart_item requires quantity, modifier_changes, or special_instructions"}
+    if has_quantity_to_modify and not has_modifier_changes and not has_special_instructions:
+        return {"success": False, "error": "quantity_to_modify requires modifier_changes or special_instructions"}
     if has_quantity_to_modify and has_quantity:
         return {"success": False, "error": "quantity_to_modify cannot be combined with quantity"}
+
+    if has_special_instructions:
+        try:
+            new_special_instructions = _special_instructions(action["special_instructions"])
+        except ValueError as exc:
+            return {"success": False, "error": str(exc)}
+    else:
+        new_special_instructions = line.special_instructions
 
     if has_modifier_changes:
         changes = action.get("modifier_changes")
@@ -396,8 +427,8 @@ def _process_update_cart_item(session, action):
             return {"success": False, "error": str(exc)}
     else:
         selected_ids = None
-        new_unit_price = None
-        new_options = None
+        new_unit_price = line.unit_price
+        new_options = line.options
 
     try:
         if has_quantity_to_modify:
@@ -413,7 +444,7 @@ def _process_update_cart_item(session, action):
                     quantity=quantity_to_modify,
                     unit_price=new_unit_price,
                     options=new_options,
-                    special_instructions=line.special_instructions,
+                    special_instructions=new_special_instructions,
                 )
                 return {
                     "success": True,
@@ -429,6 +460,8 @@ def _process_update_cart_item(session, action):
             changes["quantity"] = action.get("quantity")
         if has_modifier_changes:
             changes["modifier_ids"] = selected_ids
+        if has_special_instructions:
+            changes["special_instructions"] = new_special_instructions
         updated_line = update_cart_line(line, **changes)
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
@@ -447,6 +480,12 @@ def _process_remove_cart_item(session, action):
         line = get_cart_line(session.tenant, session.session_id, action.get("line_id"), for_update=True)
     except (InvalidCartLineId, CartLineNotFound) as exc:
         return {"success": False, "error": str(exc)}
+    if AgentPendingItem.objects.filter(
+        session=session,
+        cart_item=line,
+        status__in=[AgentPendingItem.STATUS_NEEDS_ITEM, AgentPendingItem.STATUS_AMBIGUOUS, AgentPendingItem.STATUS_NEEDS_INPUT],
+    ).exists():
+        return {"success": False, "error": "This item is still pending and must be resolved or cancelled first"}
     line_id = f"line_{line.pk}"
     cart = remove_cart_line(line)
     return {
@@ -584,6 +623,8 @@ def _process_action(session, action):
         return _process_select_modifier(session, action)
     if action_type == "revise_pending_item":
         return _process_revise_pending_item(session, action)
+    if action_type == "cancel_pending_item":
+        return _process_cancel_pending_item(session, action)
     if action_type == "update_cart_item":
         return _process_update_cart_item(session, action)
     if action_type == "remove_cart_item":
