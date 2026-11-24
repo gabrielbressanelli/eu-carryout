@@ -8,6 +8,7 @@ from catalog.models import MenuItem
 from catalog.pricing import modifier_assignments, validate_and_price
 
 from .matching import resolve_item_modifiers, search_menu
+from .cart_services import CartLineNotFound, InvalidCartLineId, get_cart_line, remove_cart_line, update_cart_line
 from .models import AgentCallCart, AgentCallCartItem, AgentOrderAction, AgentOrderSession, AgentPendingItem
 
 log = logging.getLogger(__name__)
@@ -205,10 +206,12 @@ def _create_pending(session, action, item=None, candidates=None, selected_modifi
 
 
 def _pending_result(pending):
-    status = "ambiguous" if pending.status in {
-        AgentPendingItem.STATUS_AMBIGUOUS,
-        AgentPendingItem.STATUS_NEEDS_ITEM,
-    } else "needs_input"
+    if pending.status == AgentPendingItem.STATUS_AMBIGUOUS:
+        status = "ambiguous"
+    elif pending.status == AgentPendingItem.STATUS_NEEDS_ITEM:
+        status = "needs_item"
+    else:
+        status = "needs_input"
     return {
         "success": True,
         "status": status,
@@ -261,6 +264,197 @@ def _process_add_item(session, action):
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
     return _added_result(cart_item=cart_item)
+
+
+def _revise_pending_item(session, pending, phrase):
+    resolution = search_menu(phrase, session.tenant)
+    pending.original_phrase = phrase
+
+    if resolution["match_status"] == "no_match":
+        pending.menu_item = None
+        pending.candidate_item_ids = []
+        pending.selected_modifiers = []
+        pending.missing_groups = [{"type": "item"}]
+        pending.status = AgentPendingItem.STATUS_NEEDS_ITEM
+        pending.save()
+        return _pending_result(pending)
+
+    if resolution["match_status"] == "ambiguous":
+        candidates = [row["item"].pk for row in resolution["candidates"]]
+        pending.menu_item = None
+        pending.candidate_item_ids = candidates
+        pending.selected_modifiers = []
+        pending.missing_groups = [{"type": "item"}]
+        pending.status = AgentPendingItem.STATUS_AMBIGUOUS
+        pending.save()
+        result = _pending_result(pending)
+        result["candidates"] = [
+            {"item_id": row["item"].pk, "item_name": row["item"].name}
+            for row in resolution["candidates"]
+        ]
+        return result
+
+    item = resolution["item"]
+    selected_modifiers, missing_groups = resolve_item_modifiers(phrase, item)
+    pending.menu_item = item
+    pending.candidate_item_ids = []
+    pending.selected_modifiers = selected_modifiers
+    pending.missing_groups = missing_groups
+    if missing_groups:
+        pending.status = AgentPendingItem.STATUS_NEEDS_INPUT
+        pending.save()
+        return _pending_result(pending)
+
+    try:
+        cart_item = _add_to_cart(session, item, pending.quantity, selected_modifiers, pending.special_instructions)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    pending.status = AgentPendingItem.STATUS_ADDED
+    pending.cart_item = cart_item
+    pending.save()
+    return _added_result(pending=pending, cart_item=cart_item)
+
+
+def _process_revise_pending_item(session, action):
+    pending, error = _load_pending(session, action)
+    if error:
+        return error
+
+    phrase = action.get("phrase", action.get("corrected_phrase"))
+    if not isinstance(phrase, str) or not phrase.strip():
+        return {"success": False, "error": "revise_pending_item requires phrase or corrected_phrase"}
+    phrase = phrase.strip()
+
+    try:
+        if "quantity" in action:
+            pending.quantity = _positive_integer(action["quantity"], "quantity")
+        if "special_instructions" in action:
+            pending.special_instructions = _special_instructions(action["special_instructions"])
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    return _revise_pending_item(session, pending, phrase)
+
+
+def _modifier_change_ids(item, existing_option_ids, changes):
+    assignments = modifier_assignments(item)
+    groups = {assignment.group_id: assignment for assignment in assignments}
+    option_groups = {
+        option.pk: assignment.group_id
+        for assignment in assignments
+        for option in assignment.group.options.all()
+    }
+    changed_groups = set()
+    replacement_ids = []
+    for change in changes:
+        if not isinstance(change, dict):
+            raise ValueError("Each modifier_change must be an object")
+        group_id = change.get("group_id")
+        option_id = change.get("option_id")
+        group_id = _positive_integer(group_id, "group_id")
+        option_id = _positive_integer(option_id, "option_id")
+        assignment = groups.get(group_id)
+        if not assignment:
+            raise ValueError("Modifier group is not available for this item")
+        if option_groups.get(option_id) != group_id:
+            raise ValueError("Modifier option is not available for this item group")
+        if not assignment.group.options.filter(pk=option_id, is_active=True).exists():
+            raise ValueError("Modifier option is not available for this item group")
+        changed_groups.add(group_id)
+        replacement_ids.append(option_id)
+
+    preserved_ids = [option_id for option_id in existing_option_ids if option_groups.get(option_id) not in changed_groups]
+    selected_ids = preserved_ids + replacement_ids
+    return selected_ids
+
+
+def _process_update_cart_item(session, action):
+    try:
+        line = get_cart_line(session.tenant, session.session_id, action.get("line_id"), for_update=True)
+    except (InvalidCartLineId, CartLineNotFound) as exc:
+        return {"success": False, "error": str(exc)}
+
+    has_quantity = "quantity" in action
+    has_modifier_changes = "modifier_changes" in action
+    has_quantity_to_modify = "quantity_to_modify" in action
+    if not has_quantity and not has_modifier_changes:
+        return {"success": False, "error": "update_cart_item requires quantity or modifier_changes"}
+    if has_quantity_to_modify and not has_modifier_changes:
+        return {"success": False, "error": "quantity_to_modify requires modifier_changes"}
+    if has_quantity_to_modify and has_quantity:
+        return {"success": False, "error": "quantity_to_modify cannot be combined with quantity"}
+
+    if has_modifier_changes:
+        changes = action.get("modifier_changes")
+        if not isinstance(changes, list):
+            return {"success": False, "error": "modifier_changes must be an array"}
+        try:
+            existing_ids = [option["id"] for option in line.options]
+            selected_ids = _modifier_change_ids(line.menu_item, existing_ids, changes)
+            new_unit_price, new_options = validate_and_price(line.menu_item, selected_ids)
+        except (KeyError, TypeError, ValueError) as exc:
+            return {"success": False, "error": str(exc)}
+    else:
+        selected_ids = None
+        new_unit_price = None
+        new_options = None
+
+    try:
+        if has_quantity_to_modify:
+            quantity_to_modify = _positive_integer(action.get("quantity_to_modify"), "quantity_to_modify")
+            if quantity_to_modify > line.quantity:
+                return {"success": False, "error": "quantity_to_modify cannot exceed the cart line quantity"}
+            if quantity_to_modify < line.quantity:
+                remaining_quantity = line.quantity - quantity_to_modify
+                update_cart_line(line, quantity=remaining_quantity)
+                changed_line = AgentCallCartItem.objects.create(
+                    cart=line.cart,
+                    menu_item=line.menu_item,
+                    quantity=quantity_to_modify,
+                    unit_price=new_unit_price,
+                    options=new_options,
+                    special_instructions=line.special_instructions,
+                )
+                return {
+                    "success": True,
+                    "status": "updated_cart_item",
+                    "line_id": f"line_{changed_line.pk}",
+                    "cart_item": _cart_item_payload(changed_line),
+                    "split_from_line_id": f"line_{line.pk}",
+                    "cart": {"subtotal": str(line.cart.subtotal())},
+                }
+
+        changes = {}
+        if has_quantity:
+            changes["quantity"] = action.get("quantity")
+        if has_modifier_changes:
+            changes["modifier_ids"] = selected_ids
+        updated_line = update_cart_line(line, **changes)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    return {
+        "success": True,
+        "status": "updated_cart_item",
+        "line_id": f"line_{updated_line.pk}",
+        "cart_item": _cart_item_payload(updated_line),
+        "cart": {"subtotal": str(updated_line.cart.subtotal())},
+    }
+
+
+def _process_remove_cart_item(session, action):
+    try:
+        line = get_cart_line(session.tenant, session.session_id, action.get("line_id"), for_update=True)
+    except (InvalidCartLineId, CartLineNotFound) as exc:
+        return {"success": False, "error": str(exc)}
+    line_id = f"line_{line.pk}"
+    cart = remove_cart_line(line)
+    return {
+        "success": True,
+        "status": "removed_cart_item",
+        "line_id": line_id,
+        "cart": {"subtotal": str(cart.subtotal())},
+    }
 
 
 def _load_pending(session, action):
@@ -388,6 +582,12 @@ def _process_action(session, action):
         return _process_select_item(session, action)
     if action_type == "select_modifier":
         return _process_select_modifier(session, action)
+    if action_type == "revise_pending_item":
+        return _process_revise_pending_item(session, action)
+    if action_type == "update_cart_item":
+        return _process_update_cart_item(session, action)
+    if action_type == "remove_cart_item":
+        return _process_remove_cart_item(session, action)
     return {"success": False, "error": f"Unsupported action type: {action_type or 'missing'}"}
 
 

@@ -23,6 +23,13 @@ from ordering.services import create_order_from_agent_cart
 from ordering.views import _platform_fee_amount_cents
 from ordering.cart import Cart
 from .auth import authenticate_agent_request
+from .cart_services import (
+    CartLineNotFound,
+    InvalidCartLineId,
+    get_cart_line,
+    remove_cart_line,
+    update_cart_line,
+)
 from .matching import resolve_item_modifiers, search_menu, search_menu_by_category
 from .models import AgentCallCart, AgentCallCartItem, AgentOrderSession
 from .order_summary import compute_total_from_summary
@@ -379,42 +386,29 @@ def cart_item_detail(request, tenant_slug, line_id):
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
 
-    pk = _parse_line_id(line_id)
-    if pk is None:
-        return JsonResponse({"error": "Invalid line_id"}, status=400)
-
     try:
-        item = AgentCallCartItem.objects.select_related("cart", "menu_item").get(
-            pk=pk,
-            cart__tenant=tenant,
-            cart__session_id=session_id,
-        )
-    except AgentCallCartItem.DoesNotExist:
-        return JsonResponse({"error": "Cart line not found"}, status=404)
+        item = get_cart_line(tenant, session_id, line_id)
+    except InvalidCartLineId as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except CartLineNotFound as exc:
+        return JsonResponse({"error": str(exc)}, status=404)
 
     cart = item.cart
     if request.method == "DELETE":
-        item.delete()
+        remove_cart_line(item)
         return JsonResponse({"success": True, "cart": {"subtotal": str(cart.subtotal())}})
 
-    if "modifiers" in payload:
-        try:
-            selected_ids = _modifier_ids(payload)
-            item.unit_price, item.options = validate_and_price(item.menu_item, selected_ids)
-        except ValueError as exc:
-            return JsonResponse({"success": False, "error": str(exc)}, status=400)
-
-    if "quantity" in payload:
-        try:
-            item.quantity = _quantity_from_payload(payload)
-        except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
-    if "special_instructions" in payload:
-        try:
-            item.special_instructions = _special_instructions(payload)
-        except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
-    item.save()
+    changes = {}
+    try:
+        if "modifiers" in payload:
+            changes["modifier_ids"] = _modifier_ids(payload)
+        if "quantity" in payload:
+            changes["quantity"] = _quantity_from_payload(payload)
+        if "special_instructions" in payload:
+            changes["special_instructions"] = _special_instructions(payload)
+        update_cart_line(item, **changes)
+    except ValueError as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
 
     return JsonResponse({
         "success": True,

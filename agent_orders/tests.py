@@ -508,6 +508,231 @@ class AgentOrdersApiTests(TestCase):
             1,
         )
 
+    def test_order_turn_revises_existing_pending_item_from_corrected_phrase(self):
+        filet = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            price="54.00",
+        )
+        temperature = ModifierGroup.objects.create(tenant=self.tenant, name="Temperature", required=True)
+        medium_rare = ModifierOption.objects.create(group=temperature, name="Medium Rare")
+        MenuItemModifierGroup.objects.create(menu_item=filet, group=temperature)
+
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "revise-pending-call",
+                "actions": [{
+                    "action_id": "add-filet-incomplete",
+                    "type": "add_item",
+                    "phrase": "filet",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(add_response.status_code, 200)
+        pending_id = add_response.json()["next_question"]["pending_id"]
+
+        revise_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "revise-pending-call",
+                "actions": [{
+                    "action_id": "revise-filet-complete",
+                    "type": "revise_pending_item",
+                    "pending_id": pending_id,
+                    "phrase": "filet medium rare",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(revise_response.status_code, 200)
+        payload = revise_response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["pending_count"], 0)
+        self.assertEqual(payload["results"][0]["status"], "added_to_cart")
+        self.assertEqual(payload["results"][0]["pending_id"], pending_id)
+        self.assertEqual(payload["results"][0]["completed_item"]["modifiers"][0]["id"], medium_rare.pk)
+
+        cart = self.client.get("/api/one-sixty-main/agent/cart/revise-pending-call", **self.auth).json()
+        self.assertEqual(len(cart["items"]), 1)
+        self.assertEqual(cart["pending_count"], 0)
+
+        retry_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "revise-pending-call",
+                "actions": [{
+                    "action_id": "revise-filet-complete",
+                    "type": "revise_pending_item",
+                    "pending_id": pending_id,
+                    "phrase": "filet medium rare",
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(retry_response.status_code, 200)
+        self.assertEqual(retry_response.json()["results"], payload["results"])
+        self.assertEqual(
+            len(self.client.get("/api/one-sixty-main/agent/cart/revise-pending-call", **self.auth).json()["items"]),
+            1,
+        )
+
+    def test_order_turn_updates_quantity_and_removes_cart_line(self):
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "cart-edit-call",
+                "actions": [{
+                    "action_id": "add-calamari",
+                    "type": "add_item",
+                    "phrase": "calamari",
+                    "quantity": 2,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(add_response.status_code, 200)
+        line_id = add_response.json()["results"][0]["completed_item"]["line_id"]
+
+        update_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "cart-edit-call",
+                "actions": [{
+                    "action_id": "change-calamari-quantity",
+                    "type": "update_cart_item",
+                    "line_id": line_id,
+                    "quantity": 3,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.json()["results"][0]["status"], "updated_cart_item")
+        self.assertEqual(update_response.json()["results"][0]["cart_item"]["quantity"], 3)
+
+        remove_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "cart-edit-call",
+                "actions": [{
+                    "action_id": "remove-calamari",
+                    "type": "remove_cart_item",
+                    "line_id": line_id,
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(remove_response.status_code, 200)
+        self.assertEqual(remove_response.json()["results"][0]["status"], "removed_cart_item")
+        self.assertEqual(
+            self.client.get("/api/one-sixty-main/agent/cart/cart-edit-call", **self.auth).json()["items"],
+            [],
+        )
+
+    def test_order_turn_replaces_cart_modifier(self):
+        filet = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            price="54.00",
+        )
+        temperature = ModifierGroup.objects.create(tenant=self.tenant, name="Temperature")
+        medium = ModifierOption.objects.create(group=temperature, name="Medium")
+        rare = ModifierOption.objects.create(group=temperature, name="Rare")
+        MenuItemModifierGroup.objects.create(menu_item=filet, group=temperature)
+
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/cart/items",
+            data=json.dumps({
+                "session_id": "modifier-edit-call",
+                "item_id": filet.pk,
+                "quantity": 1,
+                "modifiers": [{"option_id": medium.pk}],
+                "special_instructions": "",
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        line_id = add_response.json()["cart_item"]["line_id"]
+
+        update_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "modifier-edit-call",
+                "actions": [{
+                    "action_id": "change-filet-to-rare",
+                    "type": "update_cart_item",
+                    "line_id": line_id,
+                    "modifier_changes": [{"group_id": temperature.pk, "option_id": rare.pk}],
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(update_response.status_code, 200)
+        payload = update_response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["results"][0]["cart_item"]["modifiers"][0]["id"], rare.pk)
+        self.assertNotIn(medium.pk, [option["id"] for option in payload["results"][0]["cart_item"]["modifiers"]])
+
+    def test_order_turn_splits_multi_quantity_line_for_modifier_change(self):
+        filet = MenuItem.objects.create(
+            tenant=self.tenant,
+            category=self.category,
+            name="Filet",
+            price="54.00",
+        )
+        temperature = ModifierGroup.objects.create(tenant=self.tenant, name="Temperature")
+        medium = ModifierOption.objects.create(group=temperature, name="Medium")
+        rare = ModifierOption.objects.create(group=temperature, name="Rare")
+        MenuItemModifierGroup.objects.create(menu_item=filet, group=temperature)
+
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/cart/items",
+            data=json.dumps({
+                "session_id": "split-edit-call",
+                "item_id": filet.pk,
+                "quantity": 2,
+                "modifiers": [{"option_id": medium.pk}],
+                "special_instructions": "",
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        line_id = add_response.json()["cart_item"]["line_id"]
+
+        update_response = self.client.post(
+            "/api/one-sixty-main/agent/orders/turn",
+            data=json.dumps({
+                "session_id": "split-edit-call",
+                "actions": [{
+                    "action_id": "make-one-filet-rare",
+                    "type": "update_cart_item",
+                    "line_id": line_id,
+                    "quantity_to_modify": 1,
+                    "modifier_changes": [{"group_id": temperature.pk, "option_id": rare.pk}],
+                }],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.json()["results"][0]["status"], "updated_cart_item")
+        cart = self.client.get("/api/one-sixty-main/agent/cart/split-edit-call", **self.auth).json()
+        self.assertEqual(len(cart["items"]), 2)
+        self.assertEqual(sorted(item["quantity"] for item in cart["items"]), [1, 1])
+        modifier_ids = {item["modifiers"][0]["id"] for item in cart["items"]}
+        self.assertEqual(modifier_ids, {medium.pk, rare.pk})
+
     def test_order_turn_replays_same_action_without_duplicate_cart_line(self):
         payload = {
             "session_id": "idempotent-call",

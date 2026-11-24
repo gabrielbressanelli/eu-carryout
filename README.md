@@ -110,7 +110,7 @@ The ordering conversation controller is available at:
 POST /api/<tenant-slug>/agent/orders/turn
 ```
 
-It requires the same `Authorization: Bearer <tenant-agent-token>` header as the other agent endpoints. The first version supports `add_item`, `select_item`, and `select_modifier` actions, persists unresolved items, returns the next required question, and writes complete items into the existing agent cart. Each action must include a unique `action_id` so retries do not create duplicate cart lines.
+It requires the same `Authorization: Bearer <tenant-agent-token>` header as the other agent endpoints. Supported actions include `add_item`, `select_item`, `select_modifier`, and `revise_pending_item`. The controller persists unresolved items, returns the next required question, and writes complete items into the existing agent cart. `revise_pending_item` accepts a `pending_id` and corrected `phrase` while preserving the existing pending record. Each action must include a unique `action_id` so retries do not create duplicate cart lines.
 
 The existing cart read endpoint also reports active pending items:
 
