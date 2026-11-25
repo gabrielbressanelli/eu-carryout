@@ -32,6 +32,7 @@ def create_order_from_cart(cart, stripe_session_id="", customer=None, status=Ord
     with transaction.atomic():
         order = Order.objects.create(
             tenant=cart.tenant,
+            order_source=Order.SOURCE_WEBSITE,
             pickup_at=pickup_at,
             pickup_timezone=cart.tenant.timezone,
             customer_email=customer.get("email") or "",
@@ -88,6 +89,7 @@ def create_order_from_agent_cart(agent_cart, customer=None, pickup_at=None):
     with transaction.atomic():
         order = Order.objects.create(
             tenant=agent_cart.tenant,
+            order_source=Order.SOURCE_AGENT,
             pickup_at=pickup_at,
             pickup_timezone=agent_cart.tenant.timezone,
             customer_email=customer.get("email") or "",

@@ -66,7 +66,7 @@ def build_order_event_payload(order):
         pickup_time = order.pickup_at.astimezone(pickup_zone).strftime("%I:%M %p").lstrip("0")
     return {
         "event": "order.paid",
-        "type": "Website Carryout",
+        "type": "AI Host Carryout" if order.order_source == "agent" else "Website Carryout",
         "tenant_id": tenant.id,
         "tenant_slug": tenant.slug,
         "tenant_name": tenant.name,

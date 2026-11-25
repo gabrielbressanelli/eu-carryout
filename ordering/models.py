@@ -3,6 +3,13 @@ from django.db import models
 
 
 class Order(models.Model):
+    SOURCE_WEBSITE = "website"
+    SOURCE_AGENT = "agent"
+    SOURCE_CHOICES = [
+        (SOURCE_WEBSITE, "Website"),
+        (SOURCE_AGENT, "AI Host"),
+    ]
+
     pickup_at = models.DateTimeField(null=True, blank=True)
     pickup_timezone = models.CharField(max_length=64, blank=True, default="")
     STATUS_DRAFT = "draft"
@@ -27,6 +34,7 @@ class Order(models.Model):
     customer_email = models.EmailField(db_index=True)
     customer_name = models.CharField(max_length=120, blank=True, default="")
     customer_phone = models.CharField(max_length=32, blank=True, default="")
+    order_source = models.CharField(max_length=24, choices=SOURCE_CHOICES, default=SOURCE_WEBSITE)
     status = models.CharField(max_length=24, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     fulfillment_status = models.CharField(max_length=24, choices=FULFILLMENT_CHOICES, default=FULFILLMENT_PENDING)
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)

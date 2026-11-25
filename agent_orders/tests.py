@@ -1308,7 +1308,9 @@ class AgentOrdersApiTests(TestCase):
         self.assertEqual(len(payload["warnings"]), 2)
         self.assertIn("Unknown Sauce", " ".join(payload["warnings"]))
         self.assertIn("Missing Dish", " ".join(payload["warnings"]))
-        self.assertEqual(str(Order.objects.get().amount_paid), "16.00")
+        order = Order.objects.get()
+        self.assertEqual(str(order.amount_paid), "16.00")
+        self.assertEqual(order.order_source, Order.SOURCE_AGENT)
 
     @override_settings(STRIPE_SECRET_KEY="test-key")
     def test_finalize_summary_uses_location_stripe_account_override(self):

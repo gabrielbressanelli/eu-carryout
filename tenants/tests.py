@@ -322,6 +322,17 @@ class OnboardingFlowTests(TestCase):
         self.assertEqual(payload["pickup_time"], "5:30 PM")
         self.assertEqual(payload["pickUpTime"], "5:30 PM")
 
+    def test_agent_order_event_uses_ai_host_type(self):
+        order = Order.objects.create(
+            tenant=self.tenant,
+            order_source=Order.SOURCE_AGENT,
+            customer_name="Gabriel Bressanelli",
+            order_summary="1x Grilled chicken",
+            amount_paid="18.00",
+        )
+
+        self.assertEqual(build_order_event_payload(order)["type"], "AI Host Carryout")
+
     def test_integration_json_body_uses_order_placeholders(self):
         order = Order.objects.create(
             tenant=self.tenant,
