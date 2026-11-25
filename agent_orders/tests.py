@@ -9,7 +9,7 @@ from catalog.models import DietaryTag, MenuCategory, MenuCategoryModifierGroup, 
 from ordering.models import Order
 from tenants.models import Tenant
 
-from .models import AgentAccessToken
+from .models import AgentAccessToken, AgentCallCart
 
 
 class AgentOrdersApiTests(TestCase):
@@ -328,6 +328,63 @@ class AgentOrdersApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["cart"]["subtotal"], "0.00")
+
+    def test_cart_checkout_link_returns_prefilled_short_lived_url(self):
+        add_response = self.client.post(
+            "/api/one-sixty-main/agent/cart/items",
+            data=json.dumps({
+                "session_id": "checkout-link-call",
+                "item_id": self.item.pk,
+                "quantity": 2,
+                "modifiers": [{"option_id": self.option.pk}],
+            }),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(add_response.status_code, 201)
+
+        response = self.client.post(
+            "/api/one-sixty-main/agent/cart/checkout-link",
+            data=json.dumps({"session_id": "checkout-link-call"}),
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["checkout_url"].startswith(
+            "http://testserver/api/one-sixty-main/agent/checkout/"
+        ))
+        self.assertEqual(payload["expires_in_seconds"], 1800)
+        self.assertEqual(payload["items"][0]["quantity"], 2)
+        self.assertEqual(payload["cart"]["subtotal"], "36.00")
+
+        checkout_response = self.client.get(payload["checkout_url"])
+        self.assertEqual(checkout_response.status_code, 302)
+        self.assertEqual(checkout_response["Location"], "/one-sixty-main/checkout/")
+        self.assertEqual(
+            self.client.session[f"cart:{self.tenant.id}"][0]["menu_item_id"],
+            self.item.pk,
+        )
+
+    def test_cart_checkout_link_rejects_missing_or_empty_cart(self):
+        response = self.client.post(
+            "/api/one-sixty-main/agent/cart/checkout-link",
+            data=json.dumps({"session_id": "missing-checkout-link-call"}),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 404)
+
+        AgentCallCart.objects.create(tenant=self.tenant, session_id="empty-checkout-link-call")
+        response = self.client.post(
+            "/api/one-sixty-main/agent/cart/checkout-link",
+            data=json.dumps({"session_id": "empty-checkout-link-call"}),
+            content_type="application/json",
+            **self.auth,
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"], "Agent cart is empty")
 
     def test_cart_add_validates_retell_request_shape(self):
         invalid_payloads = [

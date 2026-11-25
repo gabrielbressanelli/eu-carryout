@@ -117,3 +117,18 @@ The existing cart read endpoint also reports active pending items:
 ```text
 GET /api/<tenant-slug>/agent/cart/<session-id>
 ```
+
+To generate a short-lived public checkout link for the current cart, send the
+agent bearer token and session ID:
+
+```text
+POST /api/<tenant-slug>/agent/cart/checkout-link
+```
+
+```json
+{"session_id": "call-123"}
+```
+
+The response includes `checkout_url`, which opens the restaurant checkout page
+with the agent cart prefilled. The link expires after 30 minutes; carts expire
+after four hours of inactivity.

@@ -437,6 +437,50 @@ def cart_detail(request, tenant_slug, session_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def cart_checkout_link(request, tenant_slug):
+    """Return a short-lived public link that opens the agent cart in checkout."""
+    tenant = _tenant_or_404(request, tenant_slug)
+    auth_error = _require_agent_auth(request, tenant)
+    if auth_error:
+        return auth_error
+
+    payload, payload_error = _request_data(request)
+    if payload_error:
+        return payload_error
+    try:
+        session_id = _session_id(payload.get("session_id"))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    _cleanup_stale_carts(tenant)
+    try:
+        cart = AgentCallCart.objects.get(tenant=tenant, session_id=session_id)
+    except AgentCallCart.DoesNotExist:
+        return JsonResponse({"error": "Agent cart not found"}, status=404)
+
+    if not cart.items.exists():
+        return JsonResponse({"error": "Agent cart is empty"}, status=422)
+
+    token = _agent_checkout_token(tenant, session_id)
+    checkout_url = request.build_absolute_uri(
+        reverse(
+            "agent_orders:agent_checkout",
+            kwargs={"tenant_slug": tenant.slug, "token": token},
+        )
+    )
+    cart_payload = _cart_payload(cart)
+    return JsonResponse({
+        "success": True,
+        "session_id": session_id,
+        "checkout_url": checkout_url,
+        "expires_in_seconds": 1800,
+        "items": cart_payload["items"],
+        "cart": cart_payload["cart"],
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def order_turn(request, tenant_slug):
     tenant = _tenant_or_404(request, tenant_slug)
     auth_error = _require_agent_auth(request, tenant)
